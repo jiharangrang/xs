@@ -23,6 +23,8 @@
     <mesh name="gripper_R_0_plus_finger" file="meshes/plus_finger.stl" scale="0.001000 0.001000 0.001000"/>
     <mesh name="gripper_R_thumb_0_plus_thumb" file="meshes/plus_thumb.stl" scale="0.001000 0.001000 0.001000"/>
     <mesh name="ibeam_mini_260609_extended" file="meshes/ibeam_mini_260609_extended.stl" scale="1.000000 1.000000 1.000000"/>
+    <mesh name="cam_set_xs" file="meshes/cam_set_xs.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="gemini_215" file="meshes/gemini_215.stl" scale="0.001 0.001 0.001"/>
   </asset>
   <worldbody>
     <!-- 초기 tip_L의 높이에 하부 플랜지의 안쪽 윗면을 맞춘 배치다. -->
@@ -65,6 +67,10 @@
                   <joint name="J6" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
                   <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
                   <geom name="shoulder_R_geom_0" type="mesh" mesh="shoulder_R_0_link6" pos="0.125800 0.000000 0.000000" quat="0.000000 0.000000 0.707107 -0.707107" rgba="0.250000 0.250000 0.280000 1.000000" contype="0" conaffinity="0"/>
+                  <!-- 현재 Fusion 아래쪽 앵커와 카메라를 CAD 전역 좌표 그대로 내보내 링크6에 고정한다. -->
+                  <!-- 시각화용 형상이므로 기존 링크 관성 및 충돌 설정을 유지한다. -->
+                  <geom name="cam_set_xs_visual" type="mesh" mesh="cam_set_xs" pos="0.125800 0 0" quat="0 0 0.707107 -0.707107" rgba="0.85 0.55 0.18 1" mass="0" contype="0" conaffinity="0" group="1"/>
+                  <geom name="gemini_215_visual" type="mesh" mesh="gemini_215" pos="0.125800 0 0" quat="0 0 0.707107 -0.707107" rgba="0.18 0.25 0.32 1" mass="0" contype="0" conaffinity="0" group="1"/>
                   <body name="gripper_R" pos="-0.074200 0.000000 -0.036360" quat="-0.500000 0.500000 0.500000 -0.500000">
                     <!-- 끝단 기준은 회전축과 안쪽 접촉 평면의 교점이며, 위치와 방향은 그리퍼 몸체 기준이다. -->
                     <site name="tip_R" pos="0 0 0.041530662041" quat="1 0 0 0" type="sphere" size="0.0015" rgba="1 0.27 0.08 1"/>

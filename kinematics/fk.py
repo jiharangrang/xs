@@ -92,6 +92,7 @@ class ForwardKinematics:
 
     XML의 위치·방향·회전축을 그대로 사용한다.
     실물 모터 보정값을 적용하거나 관절각을 제한 범위로 잘라내지 않는다.
+    월드 출력은 XML 배치 기준이며, 다른 고정점 배치는 TipAnchor.place에서 적용한다.
     """
 
     def __init__(self, model_path: str | Path = DEFAULT_MODEL_PATH) -> None:

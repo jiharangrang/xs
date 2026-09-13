@@ -1,4 +1,4 @@
-"""동차변환 입력을 검사하고 같은 기준 좌표계에서 두 자세의 오차를 계산한다."""
+"""동차변환 입력 검사, 기준 좌표계를 뒤집는 역변환과 자세 오차 계산을 제공한다."""
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -20,6 +20,27 @@ def as_pose(transform: ArrayLike) -> NDArray[np.float64]:
     if not np.isclose(np.linalg.det(rotation), 1.0, atol=1e-8, rtol=0):
         raise ValueError("회전행렬은 오른손 좌표계여야 합니다.")
     return pose
+
+
+def invert_pose(transform: ArrayLike) -> NDArray[np.float64]:
+    r"""강체 동차변환의 기준과 대상을 뒤집은 역행렬을 반환한다.
+
+    $$
+    T^{-1}=\begin{bmatrix}R^T&-R^Tp\\0&1\end{bmatrix}
+    $$
+
+    R과 p는 입력 transform의 회전행렬과 위치 벡터이다.
+    반환값은 입력과 메모리를 공유하지 않는 동차변환이다.
+    """
+    pose = as_pose(transform)
+    inverse = np.eye(4)
+    # 반대 기준에서 표현한 회전행렬: $$R_{\mathrm{inv}}=R^T$$
+    inverse[:3, :3] = pose[:3, :3].T
+    # 위치 벡터를 대상 좌표계의 축으로 표현: $$p'=R^Tp$$
+    rotated_position = inverse[:3, :3] @ pose[:3, 3]
+    # 뒤집힌 원점 사이의 위치 벡터: $$p_{\mathrm{inv}}=-p'$$
+    inverse[:3, 3] = -rotated_position
+    return inverse
 
 
 def pose_error(actual: NDArray[np.float64], target: NDArray[np.float64]) -> NDArray[np.float64]:
