@@ -1,0 +1,101 @@
+<?xml version="1.0" ?>
+<mujoco model="inchworm_xs">
+  <!-- 모델의 길이는 m, 각도는 rad이다. 로봇 STL은 mm, 빔 STL은 m 원본이며 mesh의 scale로 맞춘다. -->
+  <!-- 초기 배치에서 CAD와 월드의 축 관계: $$(x_W, y_W, z_W) = (z_C, y_C, -x_C)$$. -->
+  <compiler angle="radian" autolimits="true"/>
+  <option timestep="0.002" gravity="0 0 0" integrator="Euler"/>
+  <visual>
+    <scale framelength="1.000000" framewidth="0.050000"/>
+  </visual>
+  <default>
+    <joint damping="2.0" armature="0.05"/>
+    <geom contype="0" conaffinity="0"/>
+  </default>
+  <asset>
+    <mesh name="gripper_L_0_minus_finger" file="meshes/minus_finger.stl" scale="0.001000 0.001000 0.001000"/>
+    <mesh name="gripper_L_thumb_0_minus_thumb" file="meshes/minus_thumb.stl" scale="0.001000 0.001000 0.001000"/>
+    <mesh name="shoulder_L_0_link1" file="meshes/link1.stl" scale="0.001000 0.001000 0.001000"/>
+    <mesh name="upper_L_0_link2" file="meshes/link2.stl" scale="0.001000 0.001000 0.001000"/>
+    <mesh name="forearm_L_0_middlelink1" file="meshes/middlelink1.stl" scale="0.001000 0.001000 0.001000"/>
+    <mesh name="forearm_R_0_middlelink2" file="meshes/middlelink2.stl" scale="0.001000 0.001000 0.001000"/>
+    <mesh name="upper_R_0_link5" file="meshes/link5.stl" scale="0.001000 0.001000 0.001000"/>
+    <mesh name="shoulder_R_0_link6" file="meshes/link6.stl" scale="0.001000 0.001000 0.001000"/>
+    <mesh name="gripper_R_0_plus_finger" file="meshes/plus_finger.stl" scale="0.001000 0.001000 0.001000"/>
+    <mesh name="gripper_R_thumb_0_plus_thumb" file="meshes/plus_thumb.stl" scale="0.001000 0.001000 0.001000"/>
+    <mesh name="ibeam_mini_260609_extended" file="meshes/ibeam_mini_260609_extended.stl" scale="1.000000 1.000000 1.000000"/>
+  </asset>
+  <worldbody>
+    <!-- 초기 tip_L의 높이에 하부 플랜지의 안쪽 윗면을 맞춘 배치다. -->
+    <body name="ibeam" pos="1.622000 -0.036360 0.433530663050" quat="0.707107 -0.707107 0.000000 0.000000">
+      <geom name="ibeam_mesh" type="mesh" mesh="ibeam_mini_260609_extended" pos="-0.532850 0.223500 -0.099870" quat="0.000000 0.707107 0.000000 0.707107" rgba="0.660000 0.680000 0.720000 1.000000" contype="1" conaffinity="1"/>
+    </body>
+    <body name="gripper_L" pos="0.000000 -0.036360 0.200000" quat="0.000000 0.000000 0.000000 1.000000">
+      <!-- 끝단 기준은 회전축과 안쪽 접촉 평면의 교점이며, 위치와 방향은 그리퍼 몸체 기준이다. -->
+      <site name="tip_L" pos="0 0 0.041530662041" quat="1 0 0 0" type="sphere" size="0.0015" rgba="0 0.7 1 1"/>
+      <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
+      <geom name="gripper_L_geom_0" type="mesh" mesh="gripper_L_0_minus_finger" pos="0.000000 -0.036360 -0.200000" quat="0.000000 0.707107 0.000000 -0.707107" rgba="0.550000 0.350000 0.600000 1.000000" contype="0" conaffinity="0"/>
+      <body name="gripper_L_thumb" pos="0.000000 -0.038260 0.017381" quat="0.500000 0.500000 -0.500000 -0.500000">
+        <!-- CAD 참고 위치(mm): $$(-217.381, 1.9, 0)$$. 실행 좌표는 위 body 변환을 사용한다. -->
+        <!-- CAD에서 본 관절 좌표축: $$x=(0,1,0),\ y=(-1,0,0),\ z=(0,0,1)$$. -->
+        <joint name="G_L" type="hinge" axis="0.000000 0.000000 1.000000" range="-4.712389 4.712389"/>
+        <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
+        <geom name="gripper_L_thumb_geom_0" type="mesh" mesh="gripper_L_thumb_0_minus_thumb" pos="-0.001900 -0.217381 0.000000" quat="0.707107 0.000000 0.000000 -0.707107" rgba="0.550000 0.350000 0.600000 1.000000" contype="0" conaffinity="0"/>
+      </body>
+      <body name="shoulder_L" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
+        <joint name="J1" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
+        <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
+        <geom name="shoulder_L_geom_0" type="mesh" mesh="shoulder_L_0_link1" pos="0.000000 -0.036360 -0.200000" quat="0.000000 0.707107 0.000000 -0.707107" rgba="0.250000 0.250000 0.280000 1.000000" contype="0" conaffinity="0"/>
+        <body name="upper_L" pos="0.000000 -0.036360 -0.074200" quat="0.500000 0.500000 0.500000 -0.500000">
+          <joint name="J2" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
+          <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
+          <geom name="upper_L_geom_0" type="mesh" mesh="upper_L_0_link2" pos="0.125800 0.000000 0.000000" quat="0.707107 0.707107 0.000000 0.000000" rgba="0.700000 0.700000 0.720000 1.000000" contype="0" conaffinity="0"/>
+          <body name="forearm_L" pos="0.036360 0.000000 0.026640" quat="0.000000 0.707107 0.000000 0.707107">
+            <joint name="J3" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
+            <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
+            <geom name="forearm_L_geom_0" type="mesh" mesh="forearm_L_0_middlelink1" pos="-0.026640 0.000000 0.089440" quat="-0.500000 0.500000 0.500000 0.500000" rgba="0.250000 0.700000 0.750000 1.000000" contype="0" conaffinity="0"/>
+            <body name="forearm_R" pos="-0.026640 0.000000 0.089440" quat="0.707107 0.000000 -0.707107 0.000000">
+              <joint name="J4" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
+              <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
+              <geom name="forearm_R_geom_0" type="mesh" mesh="forearm_R_0_middlelink2" pos="0.000000 0.000000 0.000000" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.250000 0.700000 0.750000 1.000000" contype="0" conaffinity="0"/>
+              <body name="upper_R" pos="0.089440 0.000000 0.026640" quat="0.707107 0.000000 -0.707107 0.000000">
+                <joint name="J5" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
+                <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
+                <geom name="upper_R_geom_0" type="mesh" mesh="upper_R_0_link5" pos="-0.026640 0.000000 0.089440" quat="-0.500000 0.500000 -0.500000 -0.500000" rgba="0.700000 0.700000 0.720000 1.000000" contype="0" conaffinity="0"/>
+                <body name="shoulder_R" pos="-0.026640 0.000000 -0.036360" quat="0.000000 0.707107 0.000000 0.707107">
+                  <joint name="J6" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
+                  <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
+                  <geom name="shoulder_R_geom_0" type="mesh" mesh="shoulder_R_0_link6" pos="0.125800 0.000000 0.000000" quat="0.000000 0.000000 0.707107 -0.707107" rgba="0.250000 0.250000 0.280000 1.000000" contype="0" conaffinity="0"/>
+                  <body name="gripper_R" pos="-0.074200 0.000000 -0.036360" quat="-0.500000 0.500000 0.500000 -0.500000">
+                    <!-- 끝단 기준은 회전축과 안쪽 접촉 평면의 교점이며, 위치와 방향은 그리퍼 몸체 기준이다. -->
+                    <site name="tip_R" pos="0 0 0.041530662041" quat="1 0 0 0" type="sphere" size="0.0015" rgba="1 0.27 0.08 1"/>
+                    <joint name="J7" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
+                    <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
+                    <geom name="gripper_R_geom_0" type="mesh" mesh="gripper_R_0_plus_finger" pos="0.000000 -0.036360 -0.200000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.550000 0.350000 0.600000 1.000000" contype="0" conaffinity="0"/>
+                    <body name="gripper_R_thumb" pos="0.000000 -0.038260 0.017381" quat="0.500000 0.500000 -0.500000 -0.500000">
+                      <!-- CAD 참고 위치(mm): $$(217.381, -1.9, 0)$$. 실행 좌표는 위 body 변환을 사용한다. -->
+                      <!-- CAD에서 본 관절 좌표축: $$x=(0,-1,0),\ y=(1,0,0),\ z=(0,0,1)$$. -->
+                      <joint name="G_R" type="hinge" axis="0.000000 0.000000 1.000000" range="-4.712389 4.712389"/>
+                      <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
+                      <geom name="gripper_R_thumb_geom_0" type="mesh" mesh="gripper_R_thumb_0_plus_thumb" pos="-0.001900 -0.217381 0.000000" quat="0.707107 0.000000 0.000000 0.707107" rgba="0.550000 0.350000 0.600000 1.000000" contype="0" conaffinity="0"/>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="G_L_pos" joint="G_L" kp="40" ctrlrange="-4.712389 4.712389" forcerange="-200 200"/>
+    <position name="J1_pos" joint="J1" kp="40" ctrlrange="-2.960000 2.960000" forcerange="-200 200"/>
+    <position name="J2_pos" joint="J2" kp="40" ctrlrange="-2.960000 2.960000" forcerange="-200 200"/>
+    <position name="J3_pos" joint="J3" kp="40" ctrlrange="-2.960000 2.960000" forcerange="-200 200"/>
+    <position name="J4_pos" joint="J4" kp="40" ctrlrange="-2.960000 2.960000" forcerange="-200 200"/>
+    <position name="J5_pos" joint="J5" kp="40" ctrlrange="-2.960000 2.960000" forcerange="-200 200"/>
+    <position name="J6_pos" joint="J6" kp="40" ctrlrange="-2.960000 2.960000" forcerange="-200 200"/>
+    <position name="J7_pos" joint="J7" kp="40" ctrlrange="-2.960000 2.960000" forcerange="-200 200"/>
+    <position name="G_R_pos" joint="G_R" kp="40" ctrlrange="-4.712389 4.712389" forcerange="-200 200"/>
+  </actuator>
+</mujoco>

@@ -1,0 +1,11 @@
+[project]
+name = "xs-inchworm"
+version = "0.1.0"
+description = "XS 인치웜 로봇의 기구학과 초기 자세 시각화"
+requires-python = ">=3.12"
+dependencies = [
+    "mujoco>=3.13.0",
+]
+
+[tool.uv]
+package = false
