@@ -11,7 +11,7 @@ import mujoco
 import mujoco.viewer
 
 
-MODEL_PATH = Path(__file__).resolve().parent / "models" / "xs" / "model.xml"
+MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / "xs" / "model.xml"
 
 
 def load_model() -> tuple[mujoco.MjModel, mujoco.MjData]:
