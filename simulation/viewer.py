@@ -60,9 +60,13 @@ def show_pose(
             viewer.cam.elevation = -20
             viewer.opt.frame = mujoco.mjtFrame.mjFRAME_SITE
             viewer.opt.label = mujoco.mjtLabel.mjLABEL_SITE
+            # 카메라 보조 사이트의 삼축 표시는 숨기고 렌즈 방향선으로 대체한다.
+            viewer.opt.sitegroup[3] = 0
         def update_texts() -> None:
             """현재 표시 상태와 후보 모드에서만 쓰는 키 안내를 갱신한다."""
             controls = "Space: input / initial | R: input pose\nJoint: edit angles"
+            if model.ncam:
+                controls += "\nLens: blue = Depth | orange = RGB"
             status = "Input pose" if showing_input else "XML initial pose"
             if candidate_mode:
                 controls = "Enter: next candidate\n" + controls
@@ -106,7 +110,50 @@ def show_pose(
                     mujoco.mj_resetData(model, data)
                     set_arm_angles(model, data, input_angles)
                 mujoco.mj_forward(model, data)
+                viewer.user_scn.ngeom = 0
+                _add_camera_rays(model, data, viewer.user_scn)
             if display_changed:
                 update_texts()
             viewer.sync()
             time.sleep(0.02)
+
+
+def _add_camera_rays(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    scene: mujoco.MjvScene,
+    *,
+    length_m: float = 0.05,
+) -> None:
+    r"""Depth와 RGB 광학 중심에서 촬영 방향으로 짧은 선을 추가한다.
+
+    $$
+    \mathbf{p}_{\mathrm{end}} = \mathbf{p}_C - \ell R_C[:,2]
+    $$
+
+    \(\mathbf{p}_C\)와 \(R_C\)는 월드에서 본 MuJoCo 카메라의 위치와 회전이고,
+    \(\ell\)은 length_m으로 지정하는 선 길이이다. MuJoCo 카메라는 로컬 음의 Z축을 본다.
+    data는 mj_forward로 갱신된 상태여야 하며 기존 scene 도형은 유지한다.
+    해당 이름의 카메라가 없는 모델에서는 보조선을 추가하지 않는다.
+    """
+    camera_colors = (
+        ("gemini215_depth", [0.1, 0.7, 1.0, 1.0]),
+        ("gemini215_rgb", [1.0, 0.4, 0.1, 1.0]),
+    )
+    for name, color in camera_colors:
+        camera_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, name)
+        if camera_id < 0 or scene.ngeom >= scene.maxgeom:
+            continue
+        position = data.cam_xpos[camera_id]
+        rotation = data.cam_xmat[camera_id].reshape(3, 3)
+        # 렌즈 앞쪽으로 표시할 끝점: $$\mathbf{p}_{\mathrm{end}}=\mathbf{p}_C-\ell R_C[:,2]$$
+        endpoint = position - length_m * rotation[:, 2]
+        geom = scene.geoms[scene.ngeom]
+        mujoco.mjv_initGeom(
+            geom, mujoco.mjtGeom.mjGEOM_LINE,
+            np.zeros(3), np.zeros(3), np.eye(3).ravel(), np.array(color),
+        )
+        mujoco.mjv_connector(
+            geom, mujoco.mjtGeom.mjGEOM_LINE, 2.0, position, endpoint,
+        )
+        scene.ngeom += 1

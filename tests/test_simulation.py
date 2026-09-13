@@ -54,6 +54,7 @@ class PoseViewerModelTests(unittest.TestCase):
                 viewer.lock.side_effect = nullcontext
                 viewer.cam = mujoco.MjvCamera()
                 viewer.opt = mujoco.MjvOption()
+                viewer.user_scn = mujoco.MjvScene(model, maxgeom=10)
                 keys = iter((None, glfw.KEY_ENTER, ord(" "), ord("R"), glfw.KEY_ENTER))
                 snapshots = []
                 with (

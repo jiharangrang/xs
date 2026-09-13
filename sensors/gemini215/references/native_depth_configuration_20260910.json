@@ -1,0 +1,27 @@
+{
+  "profile": "<VideoStreamProfile: 1280x800@15>",
+  "format": "OBFormat.Y16",
+  "width": 1280,
+  "height": 800,
+  "fps": 15,
+  "intrinsics": {
+    "width": 1280,
+    "height": 800,
+    "fx": 952.550537109375,
+    "fy": 952.550537109375,
+    "cx": 641.4450073242188,
+    "cy": 398.7013854980469
+  },
+  "distortion": {
+    "k1": 0.0,
+    "k2": 0.0,
+    "k3": 0.0,
+    "k4": 0.0,
+    "k5": 0.0,
+    "k6": 0.0,
+    "p1": 0.0,
+    "p2": 0.0,
+    "model": "OBCameraDistortionModel.BROWN_CONRADY_K6"
+  },
+  "processing": "Native SDK depth bytes copied as uint16 with no resize, alignment or application filters."
+}

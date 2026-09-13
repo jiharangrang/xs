@@ -1,0 +1,12 @@
+<mujocoinclude>
+  <!-- CAD 장착 프레임과 저장된 장치 보정값을 결합한다. 자세의 근거와 단위는 camera_frames.yaml에 기록한다. -->
+  <body name="camera_frame" pos="0.0660193379596472 0.0637999999999998 -0.0543599999999993" quat="0 -0.707106781186547 0 0.707106781186547">
+    <site name="camera_frame" size="0.0006" rgba="0.6 0.6 0.6 1" group="3" />
+    <site name="ir1_frame" pos="0.0375 0 -0.0022" quat="1 0 0 0" size="0.0007" rgba="0.1 0.7 1 1" group="3" />
+    <site name="ir2_frame" pos="-0.0375 0 -0.0022" quat="1 0 0 0" size="0.0007" rgba="0.1 0.7 1 1" group="3" />
+    <site name="depth_frame" pos="-0.0375 0 -0.0022" quat="1 0 0 0" size="0.0007" rgba="0.1 0.7 1 1" group="3" />
+    <site name="rgb_frame" pos="-0.0176556307246732 -0.000115653392017779 -0.00136211348397869" quat="0.999993800673586 0.00050698553014139 -0.00328502243228719 0.0011619843750564" size="0.0007" rgba="1 0.4 0.1 1" group="3" />
+    <camera name="gemini215_depth" pos="-0.0375 0 -0.0022" quat="0 1 0 0" mode="fixed" resolution="1280 800" sensorsize="1 1" focalpixel="952.550537109375 952.550537109375" principalpixel="-1.44500732421875 -1.29861450195312" />
+    <camera name="gemini215_rgb" pos="-0.0176556307246732 -0.000115653392017779 -0.00136211348397869" quat="-0.00050698553014139 0.999993800673586 0.0011619843750564 0.00328502243228719" mode="fixed" resolution="1920 1080" sensorsize="1 1" focalpixel="1271.04968261719 1270.61706542969" principalpixel="-2.94635009765625 3.7303466796875" />
+  </body>
+</mujocoinclude>

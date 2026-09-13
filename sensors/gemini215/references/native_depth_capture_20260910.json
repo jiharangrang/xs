@@ -1,0 +1,15 @@
+{
+  "reference_label": "M1_arrival",
+  "capture_start_utc": "2026-09-10T08:42:28.512960+00:00",
+  "capture_end_utc": "2026-09-10T08:42:38.588815+00:00",
+  "capture_duration_s": 10.075884089997999,
+  "first_last_receive_span_s": 10.059589543001493,
+  "depth_frames": 152,
+  "width": 1280,
+  "height": 800,
+  "dtype": "uint16",
+  "raw_original_pixels_saved": true,
+  "resized": false,
+  "aligned_to_rgb": false,
+  "motion_commands_sent": false
+}

@@ -1,0 +1,13 @@
+{
+  "reference_label": "M1_arrival",
+  "capture_start_utc": "2026-09-10T08:41:14.095470+00:00",
+  "capture_end_utc": "2026-09-10T08:41:24.101141+00:00",
+  "capture_elapsed_s": 10.005694037001376,
+  "depth_frames": 0,
+  "rgb_frames": 150,
+  "camera_configuration": "camera_configuration.json",
+  "raw_depth": "Original uint16 values; meters = raw * depth_scale_mm_per_raw_unit * 0.001",
+  "rgb": "Device MJPEG bytes copied unchanged",
+  "motion_commands_sent": false,
+  "errors": []
+}

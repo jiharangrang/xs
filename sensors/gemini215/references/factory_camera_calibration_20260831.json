@@ -1,0 +1,79 @@
+{
+  "session_id": "20260831T060811Z_charuco",
+  "created_at": "20260831T060811Z",
+  "board": {
+    "squares_x": 11,
+    "squares_y": 7,
+    "square_length_m": 0.015,
+    "marker_length_m": 0.011,
+    "dictionary": "DICT_4X4_50",
+    "start_id": 0,
+    "legacy": false
+  },
+  "streams": {
+    "color_profile": "<VideoStreamProfile: 1280x720@15>",
+    "depth_profile": "<VideoStreamProfile: 1280x800@15>",
+    "alignment": "depth_to_color_software"
+  },
+  "factory_calibration": {
+    "depth_intrinsic": {
+      "width": 1280,
+      "height": 800,
+      "fx": 952.550537109375,
+      "fy": 952.550537109375,
+      "cx": 641.4450073242188,
+      "cy": 398.7013854980469
+    },
+    "depth_distortion": {
+      "k1": 0.0,
+      "k2": 0.0,
+      "k3": 0.0,
+      "p1": 0.0,
+      "p2": 0.0
+    },
+    "rgb_intrinsic": {
+      "width": 1280,
+      "height": 720,
+      "fx": 847.366455078125,
+      "fy": 847.0780639648438,
+      "cx": 641.9642333984375,
+      "cy": 362.48687744140625
+    },
+    "rgb_distortion": {
+      "k1": 0.10778512805700302,
+      "k2": -0.35156139731407166,
+      "k3": 0.28539469838142395,
+      "p1": 0.00014756216842215508,
+      "p2": -0.00041933555621653795
+    },
+    "depth_to_color": {
+      "rotation_row_major": [
+        0.9999757409095764,
+        0.002320623490959406,
+        0.006571182515472174,
+        -0.0023272852413356304,
+        0.9999967813491821,
+        0.0010063304798677564,
+        -0.006568825803697109,
+        -0.0010215990478172898,
+        0.9999778866767883
+      ],
+      "translation_mm": [
+        -19.849124908447266,
+        0.16099333763122559,
+        -0.7076319456100464
+      ]
+    }
+  },
+  "source_record": {
+    "source_path": "/Users/harang/workspace/MEDesign/outputs/worktrees/proto8-planner/outputs/calibration/gemini215/20260831T060811Z_charuco/session.json",
+    "sha256": "76a94fcc93f853c6a1d7fa303eb456e862fe791aa3f09be520ee96e9ef37276f",
+    "selected_fields": [
+      "session_id",
+      "created_at",
+      "board",
+      "streams",
+      "factory_calibration"
+    ]
+  }
+}

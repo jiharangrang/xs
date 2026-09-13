@@ -1,0 +1,270 @@
+schema_version: xs.camera_frames.v1
+length_unit: m
+quaternion_order: wxyz
+transform_convention: 부모 좌표 = 회전행렬 * 자식 좌표 + 위치
+optical_axes:
+  x: 영상 오른쪽
+  y: 영상 아래쪽
+  z: 렌즈 전방
+evidence:
+  cad_document: XS_Camera_Anchor_Underside_RGB
+  cad_measured_on: '2026-09-13'
+  device_serial_from_record: AYZ8953002D
+  factory_record_dates:
+  - '2026-08-31'
+  - '2026-09-10'
+  fresh_hardware_measurement: false
+  hand_eye_calibrated: false
+  depth_reference: 도면 IR2 = SDK Left IR
+  depth_reference_basis: 저장된 공장 Depth→RGB 이동량 19.85 mm와 CAD의 IR2→RGB 19.5 mm가 부합함.
+    IR1→RGB는 55.5 mm. 현재 기기 재조회 아님.
+  ir1_status: 개별 IR1 보정값 없이 CAD의 75 mm 베이스라인과 평행축 사용
+  depth_zero_behind_front_glass_m: 0.0022
+  depth_zero_source: https://www.stemmer-imagingusa.com/userfiles/product_files/gemini-210-series-datasheet-v1.4.pdf#page=20
+camera_frame:
+  definition: 전면 유리 평면에서 두 IR 축 교점의 중간점; 광학 좌표축 방향
+  parent_body: shoulder_R
+  position_in_parent_m:
+  - 0.06601933795964725
+  - 0.06379999999999983
+  - -0.05435999999999929
+  quaternion_in_parent_wxyz:
+  - 0.0
+  - -0.7071067811865475
+  - 0.0
+  - 0.7071067811865475
+  cad_world_position_m:
+  - 0.05978066204035276
+  - 0.054359999999999305
+  - -0.06379999999999984
+  cad_world_rotation_matrix:
+  - - 0.0
+    - 0.0
+    - 1.0
+  - - 1.0
+    - 0.0
+    - 0.0
+  - - 0.0
+    - 1.0
+    - 0.0
+frames:
+  ir1_frame:
+    parent_frame: camera_frame
+    position_m:
+    - 0.0375
+    - 0.0
+    - -0.0022
+    quaternion_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    rotation_matrix:
+    - - 1.0
+      - 0.0
+      - 0.0
+    - - 0.0
+      - 1.0
+      - 0.0
+    - - 0.0
+      - 0.0
+      - 1.0
+    status: cad_axis_and_official_depth_zero_nominal
+    cad_world_position_m:
+    - 0.05758066204035276
+    - 0.0918599999999993
+    - -0.06379999999999984
+  ir2_frame:
+    parent_frame: camera_frame
+    position_m:
+    - -0.0375
+    - 0.0
+    - -0.0022
+    quaternion_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    rotation_matrix:
+    - - 1.0
+      - 0.0
+      - 0.0
+    - - 0.0
+      - 1.0
+      - 0.0
+    - - 0.0
+      - 0.0
+      - 1.0
+    status: cad_axis_and_official_depth_zero_nominal
+    cad_world_position_m:
+    - 0.05758066204035276
+    - 0.016859999999999306
+    - -0.06379999999999984
+  depth_frame:
+    parent_frame: camera_frame
+    position_m:
+    - -0.0375
+    - 0.0
+    - -0.0022
+    quaternion_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    rotation_matrix:
+    - - 1.0
+      - 0.0
+      - 0.0
+    - - 0.0
+      - 1.0
+      - 0.0
+    - - 0.0
+      - 0.0
+      - 1.0
+    status: cad_axis_and_official_depth_zero_nominal
+    cad_world_position_m:
+    - 0.05758066204035276
+    - 0.016859999999999306
+    - -0.06379999999999984
+  rgb_frame:
+    parent_frame: camera_frame
+    position_m:
+    - -0.01765563072467317
+    - -0.00011565339201777925
+    - -0.001362113483978689
+    quaternion_wxyz:
+    - 0.9999938006735859
+    - 0.0005069855301413896
+    - -0.0032850224322871907
+    - 0.0011619843750563952
+    rotation_matrix:
+    - - 0.9999757168398627
+      - -0.002327285260750651
+      - -0.006568825916192902
+    - - 0.002320623425393214
+      - 0.9999967855159688
+      - -0.001021599063821303
+    - - 0.006571182353250518
+      - 0.0010063304848691012
+      - 0.999977903186583
+    status: stored_factory_relative_to_nominal_depth_mount
+    cad_world_position_m:
+    - 0.05841854855637407
+    - 0.03670436927532614
+    - -0.06391565339201762
+cad_lens_axes:
+  ir1:
+    y_m: 0.09185999999999879
+    z_m: -0.06379999999999986
+    forward_cad:
+    - 1
+    - 0
+    - 0
+  ir2:
+    y_m: 0.016859999999999823
+    z_m: -0.06379999999999984
+    forward_cad:
+    - 1
+    - 0
+    - 0
+  rgb:
+    y_m: 0.03636000000000014
+    z_m: -0.06379999999999995
+    forward_cad:
+    - 1
+    - 0
+    - 0
+factory_depth_to_rgb:
+  mapping: p_rgb = R_rgb_depth * p_depth + t_rgb_depth
+  rotation_row_major:
+  - - 0.9999757409095764
+    - 0.002320623490959406
+    - 0.006571182515472174
+  - - -0.0023272852413356304
+    - 0.9999967813491821
+    - 0.0010063304798677564
+  - - -0.006568825803697109
+    - -0.0010215990478172898
+    - 0.9999778866767883
+  translation_m:
+  - -0.019849124908447265
+  - 0.00016099333763122558
+  - -0.0007076319456100464
+  rotation_orthonormalization_max_change: 2.4069713666641235e-08
+mujoco_cameras:
+  gemini215_depth:
+    optical_frame: depth_frame
+    intrinsics:
+      width: 1280
+      height: 800
+      fx: 952.550537109375
+      fy: 952.550537109375
+      cx: 641.4450073242188
+      cy: 398.7013854980469
+    distortion:
+      k1: 0.0
+      k2: 0.0
+      k3: 0.0
+      k4: 0.0
+      k5: 0.0
+      k6: 0.0
+      p1: 0.0
+      p2: 0.0
+      model: OBCameraDistortionModel.BROWN_CONRADY_K6
+    mujoco_principalpixel:
+    - -1.44500732421875
+    - -1.298614501953125
+    mujoco_quaternion_in_camera_frame_wxyz:
+    - 0.0
+    - 1.0
+    - 0.0
+    - 0.0
+    distortion_applied_in_mujoco: false
+  gemini215_rgb:
+    optical_frame: rgb_frame
+    intrinsics:
+      width: 1920
+      height: 1080
+      fx: 1271.0496826171875
+      fy: 1270.6170654296875
+      cx: 962.9463500976562
+      cy: 543.7303466796875
+    distortion:
+      k1: 0.10778512805700302
+      k2: -0.35156139731407166
+      k3: 0.28539469838142395
+      k4: 0.0
+      k5: 0.0
+      k6: 0.0
+      p1: 0.00014756216842215508
+      p2: -0.00041933555621653795
+      model: OBCameraDistortionModel.BROWN_CONRADY_K6
+    mujoco_principalpixel:
+    - -2.94635009765625
+    - 3.7303466796875
+    mujoco_quaternion_in_camera_frame_wxyz:
+    - -0.0005069855301413896
+    - 0.9999938006735859
+    - 0.0011619843750563952
+    - 0.0032850224322871907
+    distortion_applied_in_mujoco: false
+rendering:
+  hide_geom_groups:
+  - 2
+  reason: 광학 중심이 렌즈 내부에 있으므로 센서 시점에서는 카메라 자체 외장 메시를 숨긴다. 외부 시점에서는 표시한다.
+  sites_group: 3
+  limitations:
+  - RGB 렌즈 왜곡은 YAML에 저장하며 MuJoCo 핀홀 렌더에는 적용되지 않음
+  - MuJoCo depth는 기하학적 깊이이며 실제 스테레오 중첩, 매칭 실패, 잡음은 재현하지 않음
+  - 실제 설치 오차를 포함한 카메라-링크 외부 보정은 미수행
+sources:
+- path: /Users/harang/workspace/XS_inchworm/sensors/gemini215/references/factory_camera_calibration_20260831.json
+  sha256: 5e634b972f16709752edf62b968667980a7e89a87936a238ab66f4abfb47c281
+- path: /Users/harang/workspace/XS_inchworm/sensors/gemini215/references/native_depth_configuration_20260910.json
+  sha256: 2687a1bfbe06fbe2f752c82ee2f685932da1cdf50a26564ef82c974d753b145f
+- path: /Users/harang/workspace/XS_inchworm/sensors/gemini215/references/native_rgbd_configuration_20260910.json
+  sha256: 350386b811f951db7e6888e309adc7a1b6f8efe64f4c04d15dc8a7027f739643
+- path: /Users/harang/workspace/XS_inchworm/models/xs/meshes/gemini_215.stl
+  sha256: ecd4770a526f094ed2cd6e385538ec9d36dc6a5bb1f94a8223d080589b473bf6
+- path: /Users/harang/Downloads/Gemini_215_CAD_Files/[2D]Orbbec Gemini 215_V1.0.pdf
+  sha256: cae159b51aae99f93749c36ea0ebfc5320d58f3354943252d4215b6fe587edf8

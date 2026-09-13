@@ -1,0 +1,196 @@
+schema_version: xs_inchworm.gemini215_reference/v1
+purpose: XS 재설계를 위한 카메라 자체의 참고 파라미터이며 자동 적용 설정이 아닙니다.
+evidence_status: 저장된 공식 사양과 장치 SDK 조회 기록을 정리했습니다. 현재 장치를 새로 측정하지 않았습니다.
+device_recorded_20260910:
+  name: Orbbec Gemini 215
+  serial_number: AYZ8953002D
+  firmware_version: 1.0.9
+  hardware_version: '1.0'
+  connection_type: USB3.0
+  uid: 4-1-2
+  vid: 11205
+  pid: 2056
+coordinate_convention:
+  optical: +X right, +Y down, +Z forward
+  raw_depth_reference: 도면 IR2에 해당하는 SDK Left IR
+  length_unit: m
+  angle_unit: deg
+nominal_official_specs:
+  sources:
+    structural_cad: Orbbec Gemini 215 V1.0 STP and 2D drawing, 2024-10-11
+    optical_specs: Orbbec Gemini 210 Series Datasheet V1.4, 2025-08
+    current_product_page: Orbbec Gemini 215 product page, checked 2026-08-23
+    sdk: Orbbec SDK v2 stream-profile intrinsics, distortion and extrinsics
+  housing_size_m:
+  - 0.12
+  - 0.026
+  - 0.0306
+  mass_kg: 0.105
+  stereo_baseline_m: 0.075
+  depth_zero_behind_front_glass_m: 0.0022
+  depth:
+    resolution:
+    - 1280
+    - 800
+    fps: 30
+    ir_active_fov_deg:
+    - 67.9
+    - 45.3
+    published_effective_fov_at_0_7m_deg:
+    - 63.5
+    - 45.6
+    fov_tolerance_deg: 3.0
+    operating_range_m:
+    - 0.15
+    - 0.7
+    recommended_range_m:
+    - 0.2
+    - 0.5
+    work_modes:
+      close_up_precision_m:
+      - 0.15
+      - 0.3
+      extended_distance_m:
+      - 0.2
+      - 0.7
+    spatial_precision_reference_m:
+      at_0_3m: 0.0005
+      at_0_6m: 0.0015
+    sensor_type: global_shutter
+  rgb:
+    resolution:
+    - 1920
+    - 1080
+    fps: 30
+    fov_deg:
+    - 74.7
+    - 46.2
+    diagonal_fov_deg: 82.3
+    fov_tolerance_deg: 3.0
+    sensor_type: rolling_shutter
+  note: 공식 사양을 옮긴 명목값입니다. 기록된 실장치 프로필은 아래 device_profiles를 참조합니다.
+  source_record:
+    source_path: /Users/harang/workspace/MEDesign/outputs/worktrees/proto8-planner/models/proto8/sensors/gemini215.yaml
+    sha256: 5afd114f8e9537c54e939c7ca533aadee7db5eb7b7e1968245cec3c3b06fac0f
+device_profiles:
+  depth:
+    resolution:
+    - 1280
+    - 800
+    fps_recorded: 15
+    format: OBFormat.Y16
+    intrinsics:
+      width: 1280
+      height: 800
+      fx: 952.550537109375
+      fy: 952.550537109375
+      cx: 641.4450073242188
+      cy: 398.7013854980469
+    distortion:
+      k1: 0.0
+      k2: 0.0
+      k3: 0.0
+      k4: 0.0
+      k5: 0.0
+      k6: 0.0
+      p1: 0.0
+      p2: 0.0
+      model: OBCameraDistortionModel.BROWN_CONRADY_K6
+    pinhole_fov_from_intrinsics_deg:
+      horizontal: 67.75115202760885
+      vertical: 45.50636048677592
+    source: references/native_depth_configuration_20260910.json
+  rgb:
+    resolution:
+    - 1920
+    - 1080
+    fps_recorded: 15
+    format: OBFormat.MJPG
+    intrinsics:
+      width: 1920
+      height: 1080
+      fx: 1271.0496826171875
+      fy: 1270.6170654296875
+      cx: 962.9463500976562
+      cy: 543.7303466796875
+    distortion:
+      k1: 0.10778512805700302
+      k2: -0.35156139731407166
+      k3: 0.28539469838142395
+      k4: 0.0
+      k5: 0.0
+      k6: 0.0
+      p1: 0.00014756216842215508
+      p2: -0.00041933555621653795
+      model: OBCameraDistortionModel.BROWN_CONRADY_K6
+    pinhole_fov_from_intrinsics_deg:
+      horizontal: 74.0971672585261
+      vertical: 46.01146114859999
+    source: references/native_rgbd_configuration_20260910.json
+field_of_view_interpretation:
+  status: 실측 시야 경계를 따로 검증한 결과가 아니라 SDK 내부 파라미터에서 계산한 핀홀 영상 시야입니다.
+  horizontal_formula_latex: \theta_x=\tan^{-1}(c_x/f_x)+\tan^{-1}((W-1-c_x)/f_x)
+  vertical_formula_latex: \theta_y=\tan^{-1}(c_y/f_y)+\tan^{-1}((H-1-c_y)/f_y)
+  pixel_convention: 영상 양 끝 픽셀 중심 사이의 각도입니다.
+  valid_depth_note: 유효 깊이 시야는 거리별 스테레오 중첩과 가림, 표면 및 매칭 조건에 따라 영상 시야보다 작아질 수 있습니다. RGB 값은 렌즈 왜곡을 반영하지 않은 핀홀 근사입니다.
+depth_to_rgb_factory:
+  source_frame: raw_depth_optical
+  target_frame: rgb_optical
+  rotation_row_major:
+  - - 0.9999757409095764
+    - 0.002320623490959406
+    - 0.006571182515472174
+  - - -0.0023272852413356304
+    - 0.9999967813491821
+    - 0.0010063304798677564
+  - - -0.006568825803697109
+    - -0.0010215990478172898
+    - 0.9999778866767883
+  translation_m:
+  - -0.019849124908447265
+  - 0.00016099333763122558
+  - -0.0007076319456100464
+  source: 'references/factory_camera_calibration_20260831.json: factory_calibration.depth_to_color'
+  note: 카메라 내부 센서 간 변환입니다. 로봇과 카메라 사이 장착 변환이 아닙니다. 최신 원본 JSON의 trans 필드에는 조회 오류가 있지만 transform 값은 이 세션의 translation_mm와
+    일치합니다.
+depth_units:
+  storage_dtype: uint16
+  saved_scale_mm_per_raw_unit: 1.0
+  saved_scale_m_per_raw_unit: 0.001
+  source: references/native_depth_frames_20260910.json
+  runtime_rule: 새 캡처에서는 SDK depth_frame.get_depth_scale() 값을 읽어 raw에 곱한 뒤 mm에서 m로 변환합니다.
+recorded_acquisition:
+  depth_frame_count: 152
+  depth_capture_start_utc: '2026-09-10T08:42:28.512960+00:00'
+  rgb_frame_count: 150
+  rgb_capture_start_utc: '2026-09-10T08:41:14.095470+00:00'
+  synchronized_rgbd_capture_verified: false
+  note: Depth 전용 캡처는 성공했습니다. native_rgbd_02 세션은 RGB만 저장되었으므로 두 기록을 동기화된 RGB-D 캡처 성공의 근거로 사용하지 않습니다.
+  processing: No application alignment, resizing, temporal/spatial filters, or recompression.
+  runtime_stream_selection: 기존 depth 실행 코드는 SDK 기본 스트림 프로필을 선택합니다. 위 15 fps는 저장 당시 값입니다.
+  device_work_mode: null
+  exposure: null
+  gain: null
+  emitter_power: null
+  unknown_settings_note: 선택한 저장 기록에 값이 없어 미확인으로 둡니다. 명목 work_modes 항목은 실제 선택 모드의 기록이 아닙니다.
+reference_files:
+  references/native_depth_configuration_20260910.json:
+    source_path: /Users/harang/workspace/MEDesign/outputs/worktrees/proto8-planner/outputs/proto8/physical_references/M1_arrival_20260910T082526772093Z/native_depth/camera_configuration.json
+    sha256: 2687a1bfbe06fbe2f752c82ee2f685932da1cdf50a26564ef82c974d753b145f
+  references/native_depth_capture_20260910.json:
+    source_path: /Users/harang/workspace/MEDesign/outputs/worktrees/proto8-planner/outputs/proto8/physical_references/M1_arrival_20260910T082526772093Z/native_depth/capture_manifest.json
+    sha256: a65acc285cf99bac6d5eb54df1db49be6e04c34ac3c51adc0dd8ec087c7e2067
+  references/native_depth_frames_20260910.json:
+    source_path: /Users/harang/workspace/MEDesign/outputs/worktrees/proto8-planner/outputs/proto8/physical_references/M1_arrival_20260910T082526772093Z/native_depth/frames.json
+    sha256: a9b8367e27bf93a632ebd5062c1398193586058f4d08dfec87558d6d8ecfcb57
+  references/native_rgbd_configuration_20260910.json:
+    source_path: /Users/harang/workspace/MEDesign/outputs/worktrees/proto8-planner/outputs/proto8/physical_references/M1_arrival_20260910T082526772093Z/native_rgbd_02/camera_configuration.json
+    sha256: 350386b811f951db7e6888e309adc7a1b6f8efe64f4c04d15dc8a7027f739643
+  references/native_rgbd_capture_20260910.json:
+    source_path: /Users/harang/workspace/MEDesign/outputs/worktrees/proto8-planner/outputs/proto8/physical_references/M1_arrival_20260910T082526772093Z/native_rgbd_02/capture_manifest.json
+    sha256: 420b0f0d31cbe21f163b6bd82cf39bde68d357d7ee6e67930a83aaf2b2f7e70e
+  references/factory_camera_calibration_20260831.json:
+    source_path: /Users/harang/workspace/MEDesign/outputs/worktrees/proto8-planner/outputs/calibration/gemini215/20260831T060811Z_charuco/session.json
+    source_sha256: 76a94fcc93f853c6a1d7fa303eb456e862fe791aa3f09be520ee96e9ef37276f
+    sha256: 5e634b972f16709752edf62b968667980a7e89a87936a238ab66f4abfb47c281
+    content: 원본 세션에서 카메라 보정과 촬영 프로필, 보드 설정만 추출했습니다.
