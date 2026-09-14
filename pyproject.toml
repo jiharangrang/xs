@@ -8,6 +8,7 @@ dependencies = [
     "mujoco>=3.13.0",
     "numpy>=2.0",
     "pyserial>=3.5,<4",
+    "pyyaml>=6.0,<7",
     "scipy>=1.14",
 ]
 

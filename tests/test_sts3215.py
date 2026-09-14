@@ -178,14 +178,14 @@ class STS3215Tests(unittest.TestCase):
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
             self.assertEqual(main(["--port", "FAKE", "--id", "1"]), 0)
             self.assertFalse(any(packet[4] == 3 for packet in self.serial.packets))
-            self.assertEqual(main(["move", "--port", "FAKE", "--id", "1", "--delta", "50"]), 0)
-        self.assertEqual(int.from_bytes(self.serial.registers[56:58], "little"), 2098)
+            self.assertEqual(main(["move", "--port", "FAKE", "--id", "1", "--delta-deg", "5"]), 0)
+        self.assertEqual(int.from_bytes(self.serial.registers[56:58], "little"), 2105)
 
     def test_cli_timeout_sends_hold_and_reports_failure(self) -> None:
         """관찰 시간이 끝나면 위치 유지 명령을 시도하고 실패 종료 상태를 돌려준다."""
         output = StringIO()
         with patch("scripts.test_motor._observe_move", return_value=False), redirect_stdout(output), redirect_stderr(output):
-            result = main(["move", "--port", "FAKE", "--id", "1", "--delta", "50"])
+            result = main(["move", "--port", "FAKE", "--id", "1", "--delta-deg", "5"])
         self.assertEqual(result, 1)
         self.assertIn("정지 명령 전송", output.getvalue())
         self.assertEqual(self.serial.registers[40], 1)
