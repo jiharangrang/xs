@@ -213,7 +213,7 @@ mujoco_cameras:
       model: OBCameraDistortionModel.BROWN_CONRADY_K6
     mujoco_principalpixel:
     - -1.44500732421875
-    - -1.298614501953125
+    - 1.298614501953125
     mujoco_quaternion_in_camera_frame_wxyz:
     - 0.0
     - 1.0
@@ -241,7 +241,7 @@ mujoco_cameras:
       model: OBCameraDistortionModel.BROWN_CONRADY_K6
     mujoco_principalpixel:
     - -2.94635009765625
-    - 3.7303466796875
+    - -3.7303466796875
     mujoco_quaternion_in_camera_frame_wxyz:
     - -0.0005069855301413896
     - 0.9999938006735859

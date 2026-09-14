@@ -5,12 +5,18 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+MUJOCO_LOG.TXT
 
 # 이 컴퓨터에서 선택한 모터 통신 포트
 .local/motor_port.json
 
 # 실행마다 자동 저장되는 모터 진단 로그
 logs/motors/
+
+# 카메라 입력 시험에서 저장한 실제 영상
+outputs/camera/
+outputs/camera_comparison/
+outputs/beam/
 
 # macOS 자동 생성 파일
 .DS_Store

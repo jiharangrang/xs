@@ -15,5 +15,11 @@ dependencies = [
     "websockets>=14",
 ]
 
+[project.optional-dependencies]
+camera = [
+    "opencv-python>=4.10,<5",
+    "pyorbbecsdk2==2.1.2",
+]
+
 [tool.uv]
 package = false
