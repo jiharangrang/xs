@@ -7,6 +7,7 @@ import math
 import sys
 import time
 
+from hardware.calibration import MotorCalibration
 from hardware.joint_control import DEFAULT_CALIBRATION_PATH, JointController
 from hardware.ports import list_ports, resolve_port_settings
 from hardware.sts3215 import MotorError, STS3215Bus
@@ -21,7 +22,7 @@ def _observe_move(
         state = controller.read(joint)
         print(f"{joint}: 현재={state.position_deg:.3f}°, 목표={target_deg:.3f}°, 속도={state.speed_deg_s:.3f}°/s", flush=True)
         if controller.has_arrived(state, target_deg):
-            print(f"목표와의 차이가 {controller.tolerance_deg:g}° 이내이고 속도가 0°/s입니다.")
+            print(f"목표와의 차이가 {controller.tolerance_for(joint):g}° 이내이고 속도가 0°/s입니다.")
             return True
         time.sleep(0.1)
     return False
@@ -84,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
                 for state in states:
                     print(f"{state.name}: 현재 각도={state.position_deg:.3f}°, 현재 속도={state.speed_deg_s:.3f}°/s")
             elif args.action == "zero":
-                controller.save_zero(joint)
+                MotorCalibration(bus, args.calibration).save_zero(joint)
                 print(f"{joint}: 현재 기준 자세를 0°로 저장했습니다. 모터 설정은 변경하지 않았습니다.")
             elif args.action in ("torque-on", "torque-off"):
                 enabled = args.action == "torque-on"

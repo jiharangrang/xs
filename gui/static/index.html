@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>인치웜 관절 콘솔</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F7F8F9; --panel:#FFFFFF; --sunk:#EFF1F3;
+  --ink:#15191E; --ink-2:#626D78; --ink-3:#9AA4AE;
+  --line:#E3E7EA; --line-2:#CFD6DC;
+  --accent:#0E7C86; --accent-ink:#FFFFFF; --accent-wash:#E0EFF1;
+  --ok:#17794C; --stop:#B93B3B; --stop-wash:#F7E3E3;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0F1317; --panel:#161C22; --sunk:#1D242B;
+    --ink:#E7EBEF; --ink-2:#97A4B0; --ink-3:#65707B;
+    --line:#242C34; --line-2:#323C46;
+    --accent:#3FC3CE; --accent-ink:#062329; --accent-wash:#13323A;
+    --ok:#46B981; --stop:#E8635A; --stop-wash:#38191A;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
+  font-size:13px; -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+button{font:inherit; color:inherit; border:none; background:none; cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+input{font:inherit; color:inherit}
+
+.app{display:flex; flex-direction:column; height:100%}
+
+header{
+  display:flex; align-items:center; gap:12px; height:52px; padding:0 18px; flex:0 0 auto;
+  background:var(--panel); border-bottom:1px solid var(--line);
+}
+header h1{margin:0; font-size:14px; font-weight:500; letter-spacing:-.01em}
+.link{display:flex; align-items:center; gap:8px; color:var(--ink-2); font-size:12px}
+.dot{width:7px; height:7px; border-radius:50%; background:var(--ink-3); transition:background .2s}
+.dot.on{background:var(--ok)}
+.right{margin-left:auto; display:flex; align-items:center; gap:10px}
+.speed{display:flex; align-items:center; gap:7px; color:var(--ink-2); font-size:12px}
+.speed input{
+  width:62px; height:32px; padding:0 9px; text-align:right; border-radius:6px;
+  border:1px solid var(--line-2); background:var(--bg);
+  font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums;
+}
+.halt{height:32px; padding:0 14px; border-radius:6px; background:var(--stop); color:#fff; font-weight:500}
+.halt:hover{filter:brightness(1.08)}
+
+main{flex:1 1 auto; display:grid; grid-template-columns:212px 1fr; min-height:0}
+
+aside{background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; padding:8px}
+.jrow{
+  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  padding:9px 11px; border-radius:7px; color:var(--ink-2);
+}
+.jrow:hover{background:var(--sunk)}
+.jrow[aria-current="true"]{background:var(--accent-wash); color:var(--ink)}
+.jrow b{font-weight:500; font-size:13px; letter-spacing:.02em; min-width:30px}
+.jrow span{margin-left:auto; font-size:13px}
+.jrow i{width:5px; height:5px; border-radius:50%; background:transparent; flex:0 0 auto}
+.jrow i.off{background:var(--stop)}
+.jrow i.move{background:var(--accent)}
+
+section{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px; padding:28px; min-height:0; overflow-y:auto}
+.title{font-size:15px; font-weight:500; letter-spacing:.03em; color:var(--ink-2)}
+.gauge{position:relative; width:212px; height:212px}
+.gauge svg{display:block}
+.gauge .track{fill:none; stroke:var(--sunk); stroke-width:2}
+.gauge .tick{stroke:var(--line-2); stroke-width:2}
+.gauge .needle{stroke:var(--accent); stroke-width:3; stroke-linecap:round; transform-origin:106px 106px; transition:transform .12s linear}
+@media (prefers-reduced-motion:reduce){.gauge .needle{transition:none}}
+.readout{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; pointer-events:none}
+.readout .deg{font-size:40px; font-weight:400; letter-spacing:-.02em; line-height:1}
+.readout .state{font-size:11.5px; letter-spacing:.06em; color:var(--ink-3)}
+.readout .state.warning{color:var(--stop)}
+.target-status{margin:0; min-height:18px; text-align:center; color:var(--ink-2); font-size:12px}
+
+.controls{display:flex; flex-direction:column; gap:10px; width:100%; max-width:404px}
+.jog{display:grid; grid-template-columns:repeat(4,1fr); gap:8px}
+.btn{
+  height:42px; border-radius:8px; background:var(--panel); border:1px solid var(--line-2);
+  font-size:13px; font-weight:500; display:grid; place-items:center;
+  transition:border-color .12s, color .12s;
+}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn[disabled]{opacity:.4; pointer-events:none}
+.btn.filled{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.btn.filled:hover{color:var(--accent-ink); filter:brightness(1.07)}
+.btn.danger{color:var(--stop); border-color:var(--line-2)}
+.btn.danger:hover{border-color:var(--stop); color:var(--stop)}
+.goto{display:grid; grid-template-columns:1fr 104px; gap:8px}
+.goto input{
+  height:42px; padding:0 13px; border-radius:8px; border:1px solid var(--line-2); background:var(--panel);
+  font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; font-size:14px; width:100%;
+}
+.actions{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.calibration{border-top:1px solid var(--line); margin-top:6px; padding-top:12px}
+.calibration p{margin:0 0 9px; color:var(--ink-2); font-size:11.5px; line-height:1.5}
+.calibration-actions{display:grid; grid-template-columns:1fr 1.5fr; gap:8px}
+
+.toast{
+  position:fixed; left:50%; bottom:26px; transform:translate(-50%,14px);
+  max-width:520px; padding:11px 16px; border-radius:8px; font-size:12.5px; line-height:1.45;
+  background:var(--stop-wash); color:var(--stop); border:1px solid var(--stop);
+  opacity:0; pointer-events:none; transition:opacity .18s, transform .18s;
+}
+.toast.show{opacity:1; transform:translate(-50%,0)}
+.toast.success{background:var(--accent-wash); color:var(--accent); border-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>인치웜 관절 콘솔</h1>
+    <span class="link"><i class="dot" id="dot"></i><span class="mono" id="port">연결 중</span></span>
+    <div class="right">
+      <label class="speed">속도<input class="mono" id="speed" type="number" value="10" min="0.5" step="0.5"><span>°/s</span></label>
+      <button class="halt" id="halt">전체 정지</button>
+    </div>
+  </header>
+
+  <main>
+    <aside id="list"></aside>
+    <section>
+      <span class="title" id="jname">—</span>
+      <div class="gauge">
+        <svg viewBox="0 0 212 212" width="212" height="212" aria-hidden="true">
+          <circle class="track" cx="106" cy="106" r="94"></circle>
+          <line class="tick" x1="106" y1="1" x2="106" y2="8"></line>
+          <line class="needle" id="needle" x1="106" y1="12" x2="106" y2="34"></line>
+        </svg>
+        <div class="readout">
+          <span class="deg mono" id="deg">—</span>
+          <span class="state" id="state">연결 대기</span>
+        </div>
+      </div>
+      <div class="controls">
+        <p class="target-status mono" id="target-status"></p>
+        <div class="jog">
+          <button class="btn mono" data-jog="-5">−5°</button>
+          <button class="btn mono" data-jog="-1">−1°</button>
+          <button class="btn mono" data-jog="1">+1°</button>
+          <button class="btn mono" data-jog="5">+5°</button>
+        </div>
+        <div class="goto">
+          <input class="mono" id="target" type="number" step="0.1" inputmode="decimal" placeholder="목표 각도" aria-label="목표 각도">
+          <button class="btn filled" id="move">이동</button>
+        </div>
+        <div class="actions">
+          <button class="btn" id="torque">토크 해제</button>
+          <button class="btn danger" id="stop">정지</button>
+        </div>
+        <div class="calibration">
+          <p>전체 토크를 해제하고 시뮬레이션의 영점 자세로 맞춰 주세요.<br>현재 자세를 모터 중점(raw 2048)·관절 0°로 저장합니다.</p>
+          <div class="calibration-actions">
+            <button class="btn" id="release-all">전체 토크 해제</button>
+            <button class="btn" id="calibrate-all">전체 중점·영점 설정</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 2) => (v < 0 ? "−" : "") + Math.abs(v).toFixed(d);
+
+let joints = [];
+let selected = null;
+let connectionState = "연결 대기";
+let lastStateError = "";
+let stateTimer;
+let calibrationBusy = false;
+const lastMotionWarnings = new Map();
+
+function toast(message, success = false){
+  const box = $("toast");
+  box.textContent = message;
+  box.classList.toggle("success", success);
+  box.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => box.classList.remove("show"), 4200);
+}
+
+async function send(path, body){
+  try {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+    if (!response.ok){
+      const payload = await response.json().catch(() => ({}));
+      const detail = payload.detail;
+      toast(Array.isArray(detail) ? detail.map(item => item.msg).join("; ") : (detail ?? "명령을 보내지 못했습니다."));
+      return null;
+    }
+    return await response.json();
+  } catch {
+    toast("서버에 명령을 전달하지 못했습니다. 연결 상태를 확인해 주세요.");
+    return null;
+  }
+}
+
+const speed = () => Math.max(0.5, Number($("speed").value) || 10);
+const current = () => joints.find(j => j.name === selected);
+
+function buildList(names){
+  $("list").innerHTML = names.map(name => `
+    <button class="jrow" data-name="${name}">
+      <i></i><b class="mono">${name}</b><span class="mono">—</span>
+    </button>`).join("");
+  document.querySelectorAll(".jrow").forEach(row => {
+    row.addEventListener("click", () => { selected = row.dataset.name; paint(); });
+  });
+  selected = names[0] ?? null;
+}
+
+function paint(){
+  const allResponding = joints.length > 0 && joints.every(joint => !joint.error);
+  $("dot").classList.toggle("on", allResponding);
+  $("dot").title = allResponding ? "모터 응답 정상" : (joints.length ? "일부 모터 응답 없음" : connectionState);
+  document.querySelectorAll(".jrow").forEach(row => {
+    const joint = joints.find(j => j.name === row.dataset.name);
+    row.setAttribute("aria-current", String(row.dataset.name === selected));
+    row.querySelector("span").textContent = !joint ? "—" : (joint.error ? "응답 없음" : fmt(joint.position_deg, 1) + "°");
+    row.title = joint?.error ?? "";
+    const mark = row.querySelector("i");
+    const outside = joint && joint.motion_status === "timeout";
+    mark.className = !joint ? "" : (joint.error || !joint.torque || outside ? "off" : (joint.motion_status === "moving" || joint.speed_deg_s !== 0 ? "move" : ""));
+  });
+
+  const joint = current();
+  const available = !!joint && !joint.error;
+  document.querySelectorAll("[data-jog], #move, #torque").forEach(button => { button.disabled = calibrationBusy || !available; });
+  $("release-all").disabled = calibrationBusy || selected === null;
+  $("calibrate-all").disabled = calibrationBusy || selected === null;
+  $("calibrate-all").textContent = calibrationBusy ? "설정 중…" : "전체 중점·영점 설정";
+  $("stop").disabled = selected === null;
+  $("needle").style.visibility = available ? "visible" : "hidden";
+  $("jname").textContent = selected ?? "—";
+  $("state").title = joint?.error ?? "";
+  $("state").classList.toggle("warning", available && joint.motion_status === "timeout");
+  $("target-status").textContent = available && joint.target_deg != null
+    ? `목표 ${fmt(joint.target_deg)}° · ${joint.motion_status === "moving" ? "오차" : "결과 오차"} ${fmt(Math.abs(joint.error_deg))}° · 허용 ±${fmt(joint.tolerance_deg)}°`
+    : "";
+  if (!available){
+    $("deg").textContent = "—";
+    $("state").textContent = joint?.error ? "응답 없음" : connectionState;
+    $("torque").textContent = "토크 상태 없음";
+    return;
+  }
+  $("deg").textContent = fmt(joint.position_deg) + "°";
+  $("needle").style.transform = `rotate(${joint.position_deg}deg)`;
+  const motionLabels = {moving: "목표로 이동 중", arrived: "이동 완료", timeout: "목표 미도달"};
+  $("state").textContent = !joint.torque ? "토크 해제" : (motionLabels[joint.motion_status] ?? (joint.speed_deg_s !== 0 ? "이동 중" : "정지"));
+  $("torque").textContent = joint.torque ? "토크 해제" : "토크 켜기";
+}
+
+document.querySelectorAll("[data-jog]").forEach(button => {
+  button.addEventListener("click", () =>
+    send("/api/jog", {joint: selected, delta_deg: Number(button.dataset.jog), speed_deg_s: speed()}));
+});
+$("move").addEventListener("click", () => {
+  const angle = Number($("target").value);
+  if ($("target").value === "" || Number.isNaN(angle)){ toast("목표 각도를 입력해 주세요."); return; }
+  send("/api/move", {joint: selected, angle_deg: angle, speed_deg_s: speed()});
+});
+$("target").addEventListener("keydown", event => { if (event.key === "Enter") $("move").click(); });
+$("stop").addEventListener("click", () => send("/api/stop", {joint: selected}));
+$("halt").addEventListener("click", () => send("/api/stop", {joint: null}));
+$("torque").addEventListener("click", () => {
+  const joint = current();
+  if (joint && !joint.error) send("/api/torque", {joint: selected, enabled: !joint.torque});
+});
+$("release-all").addEventListener("click", async () => {
+  if (await send("/api/torque", {joint: null, enabled: false})) toast("전체 토크를 해제했습니다. 기준 자세로 맞춰 주세요.", true);
+});
+$("calibrate-all").addEventListener("click", async () => {
+  if (calibrationBusy) return;
+  calibrationBusy = true;
+  clearState("영점 설정 중");
+  try {
+    const result = await send("/api/calibrate-zero", {});
+    if (result) toast(`${result.joints.length}개 모터의 중점·관절 영점을 저장했습니다. 토크는 해제 상태입니다.`, true);
+  } finally {
+    calibrationBusy = false;
+    clearState("상태 확인 중");
+  }
+});
+
+function clearState(message){
+  clearTimeout(stateTimer);
+  connectionState = message;
+  joints = [];
+  paint();
+}
+
+function connect(){
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  const socket = new WebSocket(`${scheme}://${location.host}/ws`);
+  socket.addEventListener("open", () => clearState("상태 확인 중"));
+  socket.addEventListener("message", event => {
+    if (calibrationBusy) return;
+    const payload = JSON.parse(event.data);
+    joints = payload.joints ?? [];
+    for (const joint of joints){
+      if (joint.error) continue;
+      const warning = joint.motion_status === "timeout" ? `${joint.target_deg}:timeout` : "";
+      if (warning && warning !== lastMotionWarnings.get(joint.name)){
+        toast(`${joint.name}: 허용 오차 안에 도착하지 못했습니다. 목표 ${fmt(joint.target_deg)}°, 오차 ${fmt(Math.abs(joint.error_deg))}°. 모터는 원래 목표를 계속 유지합니다.`);
+      }
+      lastMotionWarnings.set(joint.name, warning);
+    }
+    const failed = joints.filter(joint => joint.error);
+    const error = payload.error || (failed.length ? "응답 없음: " + failed.map(joint => joint.name).join(", ") : "");
+    if (error && error !== lastStateError) toast(error);
+    lastStateError = error;
+    connectionState = error ? "응답 없음" : "상태 확인 중";
+    clearTimeout(stateTimer);
+    stateTimer = setTimeout(() => clearState("상태 갱신 끊김"), 3000);
+    paint();
+  });
+  socket.addEventListener("close", () => {
+    clearState("서버 연결 끊김");
+    setTimeout(connect, 1500);
+  });
+}
+
+async function initialize(){
+  try {
+    const response = await fetch("/api/joints");
+    if (!response.ok) throw new Error("관절 목록 조회 실패");
+    const info = await response.json();
+    $("port").textContent = info.port;
+    buildList(info.joints);
+    paint();
+    connect();
+  } catch {
+    clearState("서버 연결 끊김");
+    setTimeout(initialize, 1500);
+  }
+}
+
+paint();
+initialize();
+</script>
+</body>
+</html>

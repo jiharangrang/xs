@@ -2,6 +2,8 @@
 
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -99,6 +101,11 @@ class STS3215Tests(unittest.TestCase):
 
     def setUp(self) -> None:
         """포트 생성만 대체하고 제조사 패킷 생성과 해석은 그대로 실행한다."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        log_patch = patch("hardware.motor_logging.DEFAULT_LOG_DIR", Path(directory.name) / "logs")
+        log_patch.start()
+        self.addCleanup(log_patch.stop)
         self.serial = FakeSerial()
         serial_patch = patch("scservo_sdk.port_handler.serial.Serial", return_value=self.serial)
         self.serial_factory = serial_patch.start()

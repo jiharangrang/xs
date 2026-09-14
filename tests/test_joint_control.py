@@ -1,4 +1,4 @@
-"""관절 각도와 모터 패킷 사이의 변환 및 영점 저장을 실제 제조사 SDK로 검증한다."""
+"""관절 각도와 모터 패킷 사이의 변환 및 명령 스크립트를 실제 제조사 SDK로 검증한다."""
 
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
@@ -11,7 +11,7 @@ from unittest.mock import patch
 import yaml
 
 from hardware.joint_control import JointCalibration, JointController, JointState
-from hardware.sts3215 import STS3215Bus
+from hardware.sts3215 import MotorError, STS3215Bus
 from scripts.test_motor import main
 from test_sts3215 import FakeSerial
 
@@ -73,6 +73,9 @@ class JointControllerTests(unittest.TestCase):
         """실물과 분리한 직렬 포트와 임시 관절 설정 파일을 준비한다."""
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
+        log_patch = patch("hardware.motor_logging.DEFAULT_LOG_DIR", Path(directory.name) / "logs")
+        log_patch.start()
+        self.addCleanup(log_patch.stop)
         self.path = Path(directory.name) / "calibration.yaml"
         self.document = {
             "model": "test",
@@ -110,6 +113,33 @@ class JointControllerTests(unittest.TestCase):
         self.controller.move_by("J1", 5)
         self.assertEqual(self.serial.registers[42:44], (1820).to_bytes(2, "little"))
 
+    def test_torque_read_uses_joint_mapping_and_never_writes(self) -> None:
+        """관절 이름에 해당하는 모터만 조회하고 켜짐·꺼짐을 쓰기 없이 구분한다."""
+        for name, servo_id, torque in (("J1", 1, 0), ("J1", 1, 1), ("J2", 2, 1)):
+            with self.subTest(joint=name, torque=torque):
+                self.serial.registers[5] = servo_id
+                self.serial.registers[40] = torque
+                self.assertIs(self.controller.read_torque(name), bool(torque))
+                packet = self.serial.packets[-1]
+                self.assertEqual(packet[2], servo_id)
+                self.assertEqual(packet[4:7], bytes([2, 40, 1]))
+        self.assertEqual(len(self.serial.packets), 3)
+        with self.assertRaises(ValueError):
+            self.controller.read_torque("unknown")
+        self.assertEqual(len(self.serial.packets), 3)
+
+    def test_invalid_torque_or_failed_read_is_not_reported_as_off(self) -> None:
+        """알 수 없는 값과 통신 오류를 정상적인 토크 해제로 바꾸지 않는다."""
+        self.serial.registers[40] = 128
+        with self.assertRaisesRegex(MotorError, "토크 상태"):
+            self.controller.read_torque("J1")
+        self.serial.registers[40] = 0
+        for failure in ("checksum", "disconnect"):
+            with self.subTest(failure=failure), self.assertRaises(MotorError):
+                self.serial.failure = failure
+                self.controller.read_torque("J1")
+        self.assertTrue(all(packet[4] == 2 for packet in self.serial.packets))
+
     def test_invalid_command_never_writes_motor(self) -> None:
         """단위나 관절이 잘못된 명령은 토크를 켜거나 목표를 쓰지 않는다."""
         for joint, angle, speed in [("unknown", 5, 10), ("J1", 100, 10), ("J1", 5, 100)]:
@@ -119,8 +149,12 @@ class JointControllerTests(unittest.TestCase):
 
     def test_arrival_uses_shared_angle_tolerance_and_requires_rest(self) -> None:
         """허용 오차 경계와 정지 조건을 공통 모듈에서 판정하며 잘못된 상태를 거부한다."""
-        for position, speed, expected in [(1.0, 0.0, True), (-1.0, 0.0, True),
-                                          (1.0001, 0.0, False), (0.0, 0.01, False)]:
+        self.assertEqual(self.controller.tolerance_deg, 0.263671875)
+        self.assertEqual(self.controller.tolerance_for("J1"), 0.1318359375)
+        self.assertEqual(self.controller.tolerance_for("J2"), 0.263671875)
+        for position, speed, expected in [(0.1318359375, 0.0, True), (-0.1318359375, 0.0, True),
+                                          (0.13184, 0.0, False), (0.17578125, 0.0, False),
+                                          (0.0, 0.01, False)]:
             with self.subTest(position=position, speed=speed):
                 self.assertEqual(self.controller.has_arrived(JointState("J1", position, speed), 0), expected)
         with patch("hardware.joint_control.DEFAULT_TOLERANCE_DEG", 0.25):
@@ -147,38 +181,8 @@ class JointControllerTests(unittest.TestCase):
         with patch.object(JointController, "has_arrived", autospec=True, side_effect=observe), redirect_stdout(StringIO()):
             self.assertEqual(main(["move", "--port", "FAKE", "--joint", "J1", "--calibration", str(self.path),
                                    "--delta-deg", "5", "--tolerance-deg", "0.25"]), 0)
-        self.assertEqual(tolerances, [0.25])
-
-    def test_save_zero_persists_only_selected_reference_without_motor_write(self) -> None:
-        """현재 자세를 저장하고 다시 열어도 영점이 유지되며 나머지 설정은 보존한다."""
-        self.serial.registers[56:58] = (1934).to_bytes(2, "little")
-        self.controller.save_zero("J1")
-        saved = yaml.safe_load(self.path.read_text())
-        expected = self.document
-        expected["joints"]["J1"]["home_raw"] = 1934
-        self.assertEqual(saved, expected)
-        self.assertEqual(JointController(self.bus, self.path).read("J1").position_deg, 0)
-        self.assertEqual(self.controller.read("J1").position_deg, 0)
-        self.assertTrue(all(packet[4] == 2 for packet in self.serial.packets))
-
-    def test_zero_failure_preserves_file_and_current_reference(self) -> None:
-        """영점 파일 교체 실패 시 기존 파일과 메모리의 기준을 그대로 유지한다."""
-        before = self.path.read_bytes()
-        self.serial.registers[56:58] = (1934).to_bytes(2, "little")
-        with patch("hardware.joint_control.Path.replace", side_effect=OSError("저장 실패")):
-            with self.assertRaises(OSError):
-                self.controller.save_zero("J1")
-        self.assertEqual(self.path.read_bytes(), before)
-        self.assertAlmostEqual(self.controller.read("J1").position_deg, 5.009765625)
-        self.assertEqual(list(self.path.parent.iterdir()), [self.path])
-
-    def test_moving_motor_cannot_be_saved_as_zero(self) -> None:
-        """움직이는 중에는 새 영점을 저장하지 않는다."""
-        before = self.path.read_bytes()
-        self.serial.registers[58:60] = (100).to_bytes(2, "little")
-        with self.assertRaisesRegex(ValueError, "움직이고"):
-            self.controller.save_zero("J1")
-        self.assertEqual(self.path.read_bytes(), before)
+        self.assertTrue(tolerances)
+        self.assertTrue(all(tolerance == 0.25 for tolerance in tolerances))
 
     def test_duplicate_ids_fail_before_communication(self) -> None:
         """중복된 관절 ID는 통신 전에 발견한다."""
@@ -187,6 +191,89 @@ class JointControllerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "중복"):
             JointController(self.bus, self.path)
         self.assertEqual(self.serial.packets, [])
+
+    def test_stopped_outside_three_counts_is_not_arrival(self) -> None:
+        """정지한 네 카운트 오차를 거부하고 세 카운트 이내에서 이동을 완료한다."""
+        self.controller.move_to("J1", 5)
+        target = int.from_bytes(self.serial.registers[42:44], "little")
+        writes = [packet for packet in self.serial.packets if packet[4] == 3]
+        for offset, status in ((4, "moving"), (3, "arrived")):
+            with self.subTest(offset=offset):
+                self.serial.registers[56:58] = (target + offset).to_bytes(2, "little")
+                state = self.controller.read("J1")
+                self.assertEqual(state.motion_status, status)
+                self.assertEqual(state.tolerance_deg, self.controller.tolerance_for("J1"))
+        self.assertEqual([packet for packet in self.serial.packets if packet[4] == 3], writes)
+        self.assertEqual(int.from_bytes(self.serial.registers[42:44], "little"), target)
+
+    def test_completed_move_does_not_monitor_manual_displacement(self) -> None:
+        """이동 완료 뒤에는 실제 각도만 갱신하고 외력에 대한 추가 판정은 하지 않는다."""
+        self.controller.move_to("J1", 5)
+        completed = self.controller.read("J1")
+        self.assertEqual(completed.motion_status, "arrived")
+        self.serial.registers[56:58] = (2048).to_bytes(2, "little")
+        with patch.object(self.controller, "has_arrived") as judge:
+            state = self.controller.read("J1")
+            judge.assert_not_called()
+        self.assertEqual(state.position_deg, 0)
+        self.assertEqual(state.motion_status, "arrived")
+        self.assertEqual(state.error_deg, completed.error_deg)
+
+    def test_timeout_keeps_original_target_without_extra_commands(self) -> None:
+        """기한을 넘기면 미도달로 처리하고 목표를 늘리거나 덮어쓰지 않는다."""
+        with patch("hardware.joint_control.time.monotonic", return_value=100.0) as clock:
+            self.controller.move_to("J1", 5)
+            target = int.from_bytes(self.serial.registers[42:44], "little")
+            self.serial.registers[56:58] = (target + 7).to_bytes(2, "little")
+            clock.return_value = 110.0
+            state = self.controller.read("J1")
+            self.assertEqual(state.motion_status, "timeout")
+            self.assertEqual(int.from_bytes(self.serial.registers[42:44], "little"), target)
+
+    def test_slow_move_gets_time_for_commanded_distance(self) -> None:
+        """느린 장거리 이동을 고정된 짧은 기한으로 실패 처리하지 않는다."""
+        with patch("hardware.joint_control.time.monotonic", return_value=100.0) as clock:
+            self.controller.move_to("J1", 20, speed_deg_s=1)
+            self.serial.registers[56:58] = (2048).to_bytes(2, "little")
+            clock.return_value = 106.0
+            self.assertEqual(self.controller.read("J1").motion_status, "moving")
+            clock.return_value = 123.0
+            self.assertEqual(self.controller.read("J1").motion_status, "timeout")
+
+    def test_stop_and_torque_changes_cancel_tracking(self) -> None:
+        """명시적인 정지와 토크 변경 후 옛 이동 판정을 되살리지 않는다."""
+        self.controller.move_to("J1", 5)
+        self.controller.stop("J1")
+        self.assertIsNone(self.controller.read("J1").target_deg)
+        self.controller.set_torque("J1", False)
+        self.serial.registers[56:58] = (2000).to_bytes(2, "little")
+        self.controller.set_torque("J1", True)
+        state = self.controller.read("J1")
+        self.assertIsNone(state.target_deg)
+        self.assertEqual(state.motion_status, "idle")
+        self.controller.set_torque("J1", False)
+        self.assertEqual(self.controller.read("J1").motion_status, "idle")
+
+    def test_reloaded_calibration_invalidates_old_goal(self) -> None:
+        """캘리브레이션 파일을 다시 읽으면 이전 이동의 목표를 사용하지 않는다."""
+        self.controller.move_to("J1", 5)
+        self.document["joints"]["J1"]["home_raw"] = 1934
+        self.path.write_text(yaml.safe_dump(self.document))
+        self.controller.reload_calibration()
+        self.assertIsNone(self.controller.read("J1").target_deg)
+
+    def test_read_failure_and_failed_new_command_do_not_reuse_arrival(self) -> None:
+        """읽기 실패를 도착으로 처리하지 않고 실패한 새 명령 뒤에 이전 성공을 재사용하지 않는다."""
+        self.controller.move_to("J1", 5)
+        self.assertEqual(self.controller.read("J1").motion_status, "arrived")
+        self.serial.failure = "checksum"
+        with self.assertRaises(MotorError):
+            self.controller.read("J1")
+        self.serial.failure = None
+        with patch.object(self.bus, "move_to", side_effect=MotorError("전송 실패")):
+            with self.assertRaises(MotorError):
+                self.controller.move_to("J1", 10)
+        self.assertEqual(self.controller.read("J1").motion_status, "idle")
 
     def test_cli_uses_degrees_and_rejects_old_raw_flags(self) -> None:
         """각도 CLI가 도 단위 결과를 출력하고 이전 raw 옵션의 자동 해석을 막는다."""
