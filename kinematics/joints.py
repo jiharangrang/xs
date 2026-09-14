@@ -5,6 +5,7 @@ from numpy.typing import ArrayLike, NDArray
 
 
 ARM_JOINT_NAMES = ("J1", "J2", "J3", "J4", "J5", "J6", "J7")
+GRIPPER_JOINT_NAMES = ("G_L", "G_R")
 
 
 def as_joint_angles(q_rad: ArrayLike) -> NDArray[np.float64]:

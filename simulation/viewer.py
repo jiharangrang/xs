@@ -1,4 +1,4 @@
-"""일곱 관절각을 입력받아 MuJoCo 자세 뷰어를 열고 수동 비교 기능을 제공한다."""
+"""관절각 자세 비교와 고정단을 반영한 경로 재생을 같은 MuJoCo 뷰어에서 제공한다."""
 
 from collections.abc import Sequence
 from pathlib import Path
@@ -13,7 +13,8 @@ from numpy.typing import ArrayLike
 
 from kinematics.fk import DEFAULT_MODEL_PATH
 from kinematics.joints import as_joint_angles
-from simulation.model import load_model, set_arm_angles
+from planning.motion_path import MotionPath
+from simulation.model import load_model, set_arm_angles, set_path_time
 
 
 def show_pose(
@@ -28,6 +29,23 @@ def show_pose(
     other_candidates를 전달하면 q_rad를 후보 1로 두고 나머지를 Enter 키로 순환한다.
     후보 모드의 R 키는 선택한 후보를 복원하며 스페이스도 그 후보와 초기 자세를 비교한다.
     """
+    _show_viewer(q_rad, model_path, other_candidates=other_candidates)
+
+
+def show_path(motion_path: MotionPath, model_path: str | Path = DEFAULT_MODEL_PATH) -> None:
+    """저장된 경로의 첫 자세를 표시하고 Space로 재생·일시정지, R로 처음으로 돌아간다.
+
+    마지막 자세에서는 자동으로 멈춘다. 끝에서 Space를 누르면 처음부터 재생한다.
+    macOS에서는 mjpython으로 실행해야 한다.
+    """
+    _show_viewer(motion_path.segments[0].q_rad[0], model_path, motion_path=motion_path)
+
+
+def _show_viewer(
+    q_rad: ArrayLike, model_path: str | Path,
+    *, other_candidates: Sequence[ArrayLike] | None = None, motion_path: MotionPath | None = None,
+) -> None:
+    """공통 표시 설정과 창을 사용하며 자세 비교 또는 경로 재생 모드로 화면을 갱신한다."""
     input_angles = as_joint_angles(q_rad)
     candidate_mode = other_candidates is not None
     poses = [input_angles]
@@ -39,6 +57,11 @@ def show_pose(
     toggle_requested = threading.Event()
     next_requested = threading.Event()
     showing_input = True
+    elapsed_s = 0.0
+    playing = False
+    segment_index = 0
+    if motion_path is not None:
+        segment_index = set_path_time(model, data, motion_path, elapsed_s)
 
     def on_key(keycode: int) -> None:
         """다음 화면 갱신에서 입력 자세 또는 초기 자세로 돌아가도록 요청한다."""
@@ -63,11 +86,18 @@ def show_pose(
             # 카메라 보조 사이트의 삼축 표시는 숨기고 렌즈 방향선으로 대체한다.
             viewer.opt.sitegroup[3] = 0
         def update_texts() -> None:
-            """현재 표시 상태와 후보 모드에서만 쓰는 키 안내를 갱신한다."""
-            controls = "Space: input / initial | R: input pose\nJoint: edit angles"
+            """현재 모드의 키 안내와 선택 자세 또는 재생 시각을 갱신한다."""
+            if motion_path is not None:
+                segment = motion_path.segments[segment_index]
+                controls = "Space: play / pause | R: first frame"
+                state = "Playing" if playing else "Paused"
+                status = f"{state} {elapsed_s:.2f} / {motion_path.duration_s:.2f} s"
+                status += f"\n{segment.name} | fixed: {segment.anchor.fixed_tip}"
+            else:
+                controls = "Space: input / initial | R: input pose\nJoint: edit angles"
+                status = "Input pose" if showing_input else "XML initial pose"
             if model.ncam:
                 controls += "\nLens: blue = Depth | orange = RGB"
-            status = "Input pose" if showing_input else "XML initial pose"
             if candidate_mode:
                 controls = "Enter: next candidate\n" + controls
                 status = f"Candidate {candidate_index + 1}/{len(poses)} | {status}"
@@ -82,12 +112,35 @@ def show_pose(
         # 표시할 각도를 도 단위로 변환: $$q_{\mathrm{deg}}=q_{\mathrm{rad}}180/\pi$$
         input_degrees = np.rad2deg(input_angles)
         print("입력 관절각(deg):", input_degrees, flush=True)
-        print("Space: 입력·초기 자세 전환 / R: 입력 자세 / Joint: 관절각 조작", flush=True)
+        if motion_path is not None:
+            print("Space: 재생·일시정지 / R: 처음으로 (일시정지)", flush=True)
+        else:
+            print("Space: 입력·초기 자세 전환 / R: 입력 자세 / Joint: 관절각 조작", flush=True)
         if candidate_mode:
             print(f"후보 1/{len(poses)} / Enter: 다음 후보 (마지막 다음은 후보 1)", flush=True)
+        last_update = time.monotonic()
         while viewer.is_running():
             display_changed = False
             with viewer.lock():
+                now = time.monotonic()
+                if motion_path is not None:
+                    # 재생 중 경과 시간 누적: $$t_{\mathrm{new}}=t_{\mathrm{old}}+\Delta t$$
+                    elapsed_s += now - last_update if playing else 0.0
+                    if elapsed_s >= motion_path.duration_s:
+                        elapsed_s = motion_path.duration_s
+                        playing = False
+                    if toggle_requested.is_set():
+                        toggle_requested.clear()
+                        if elapsed_s >= motion_path.duration_s:
+                            elapsed_s = 0.0
+                        playing = not playing
+                    if restore_requested.is_set():
+                        restore_requested.clear()
+                        elapsed_s = 0.0
+                        playing = False
+                    segment_index = set_path_time(model, data, motion_path, elapsed_s)
+                    display_changed = True
+                last_update = now
                 if next_requested.is_set():
                     next_requested.clear()
                     candidate_index = (candidate_index + 1) % len(poses)

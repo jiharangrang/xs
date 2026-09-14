@@ -1,6 +1,7 @@
 """목표 자세 도달, 관절 제한의 출처, 비용과 실패 시 반환 계약을 검증한다."""
 
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -104,6 +105,7 @@ class InverseKinematicsTests(unittest.TestCase):
         joint.set("range", "-0.1 0.2")
         with tempfile.TemporaryDirectory() as directory:
             model_path = Path(directory) / "model.xml"
+            shutil.copy2(DEFAULT_MODEL_PATH.parent / "camera_frames.xml", model_path.parent / "camera_frames.xml")
             tree.write(model_path)
             solver = InverseKinematics(model_path)
             assert_allclose(solver.fk.joint_limits[0], [-0.1, 0.2])
