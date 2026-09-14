@@ -38,6 +38,7 @@ def show_path(motion_path: MotionPath, model_path: str | Path = DEFAULT_MODEL_PA
     마지막 자세에서는 자동으로 멈춘다. 끝에서 Space를 누르면 처음부터 재생한다.
     macOS에서는 mjpython으로 실행해야 한다.
     """
+    motion_path.validate_limits()
     _show_viewer(motion_path.segments[0].q_rad[0], model_path, motion_path=motion_path)
 
 

@@ -78,7 +78,7 @@ def plan_linear_motion(
         solver = InverseKinematics(settings=IKSettings(starts=1))
     limits = solver.fk.joint_limits
     if np.any(q_start < limits[:, 0]) or np.any(q_start > limits[:, 1]):
-        raise ValueError("시작 관절각이 XML의 관절 범위를 벗어났습니다.")
+        raise ValueError("시작 관절각이 캘리브레이션의 관절 범위를 벗어났습니다.")
     placed_start = anchor.place(solver.fk.forward(q_start))
     moving_attribute = "T_world_tip_L" if anchor.fixed_tip == "tip_R" else "T_world_tip_R"
     start_pose = getattr(placed_start, moving_attribute)

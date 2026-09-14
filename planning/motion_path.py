@@ -11,6 +11,7 @@ from numpy.typing import NDArray
 
 from kinematics.anchoring import TipAnchor
 from kinematics.joints import ARM_JOINT_NAMES, GRIPPER_JOINT_NAMES
+from kinematics.joint_limits import DEFAULT_CALIBRATION_PATH, load_joint_limits
 
 
 @dataclass
@@ -79,6 +80,29 @@ class MotionPath:
         """전체 구간의 재생 시간을 초 단위로 반환한다."""
         return sum(segment.duration_s for segment in self.segments)
 
+    def validate_limits(self, calibration_path: str | Path = DEFAULT_CALIBRATION_PATH) -> None:
+        """전체 경로 지점을 현재 팔·손가락 제한과 비교하고 첫 위반 위치를 알린다.
+
+        각 관절의 고정된 구간 제한은 양 끝점이 만족하면 선형 보간 중에도 만족한다.
+        이 검사는 속도·충돌 및 실물 추종 오차를 평가하지 않는다.
+        """
+        limits = load_joint_limits((*ARM_JOINT_NAMES, *GRIPPER_JOINT_NAMES), calibration_path)
+        for segment in self.segments:
+            grippers = segment.gripper_q_rad
+            if grippers is None:
+                grippers = np.zeros((len(segment.time_s), len(GRIPPER_JOINT_NAMES)))
+            for names, values in ((ARM_JOINT_NAMES, segment.q_rad), (GRIPPER_JOINT_NAMES, grippers)):
+                for index, name in enumerate(names):
+                    lower, upper = limits[name]
+                    invalid = np.flatnonzero((values[:, index] < lower) | (values[:, index] > upper))
+                    if invalid.size:
+                        point = int(invalid[0])
+                        raise ValueError(
+                            f"{segment.name}의 {point + 1}번째 지점: {name} 각도 "
+                            f"{np.rad2deg(values[point, index]):.3f}°가 현재 제한 "
+                            f"{np.rad2deg(lower):.3f}°부터 {np.rad2deg(upper):.3f}°를 벗어났습니다."
+                        )
+
     def sample(self, elapsed_s: float) -> tuple[int, NDArray[np.float64], NDArray[np.float64] | None]:
         r"""재생 시각에 해당하는 구간 번호와 팔·손가락 관절각을 반환한다.
 
@@ -110,8 +134,12 @@ class MotionPath:
         return segment_index, q_rad, gripper_q_rad
 
 
-def save_path(motion_path: MotionPath, file_path: str | Path) -> Path:
-    """관절 순서·단위와 각 구간의 고정 자세를 포함해 JSON 파일로 저장한다."""
+def save_path(
+    motion_path: MotionPath, file_path: str | Path,
+    *, calibration_path: str | Path = DEFAULT_CALIBRATION_PATH,
+) -> Path:
+    """현재 제한을 검사한 뒤 관절 순서·단위와 고정 자세를 JSON 파일로 저장한다."""
+    motion_path.validate_limits(calibration_path)
     payload = {
         "format": "xs.motion_path.v1",
         "angle_unit": "rad",
@@ -137,8 +165,10 @@ def save_path(motion_path: MotionPath, file_path: str | Path) -> Path:
     return destination
 
 
-def load_path(file_path: str | Path) -> MotionPath:
-    """저장된 JSON의 형식·단위·관절 순서를 확인하고 경로 객체로 복원한다."""
+def load_path(
+    file_path: str | Path, *, calibration_path: str | Path = DEFAULT_CALIBRATION_PATH,
+) -> MotionPath:
+    """저장된 JSON의 형식과 단위를 확인하고 현재 관절 제한으로 다시 검사한다."""
     payload = json.loads(Path(file_path).read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or payload.get("format") != "xs.motion_path.v1":
         raise ValueError("지원하지 않는 경로 파일 형식입니다.")
@@ -151,7 +181,7 @@ def load_path(file_path: str | Path) -> MotionPath:
     ):
         raise ValueError("경로 파일의 관절 순서 또는 단위가 일치하지 않습니다.")
     try:
-        return MotionPath(tuple(
+        motion_path = MotionPath(tuple(
             MotionSegment(
                 name=item["name"], anchor=TipAnchor(item["fixed_tip"], item["T_world_fixed_tip"]),
                 time_s=item["time_s"], q_rad=item["q_rad"], gripper_q_rad=item.get("gripper_q_rad"),
@@ -160,3 +190,5 @@ def load_path(file_path: str | Path) -> MotionPath:
         ))
     except (KeyError, TypeError) as error:
         raise ValueError("경로 파일의 구간 항목을 확인해 주세요.") from error
+    motion_path.validate_limits(calibration_path)
+    return motion_path

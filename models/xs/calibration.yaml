@@ -7,15 +7,15 @@ joints:
   J1: {servo_id: 1, direction: 1, gear_ratio: 1.0, home_raw: 2048, home_single: 3172,
     lower_rad: -2.96, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 7, leader_direction: -1}
   J2: {servo_id: 2, direction: -1, gear_ratio: 1.0, home_raw: 2048, home_single: 3642,
-    lower_rad: -2.96, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 6, leader_direction: 1}
+    lower_rad: -2.96, upper_rad: 0.4363323129985824, max_speed_rad_s: 0.55, leader_id: 6, leader_direction: 1}
   J3: {servo_id: 3, direction: -1, gear_ratio: 1.0, home_raw: 2048, home_single: 1669,
     lower_rad: -2.96, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 5, leader_direction: 1}
   J4: {servo_id: 4, direction: -1, gear_ratio: 1.0, home_raw: 2048, home_single: 1998,
-    lower_rad: -2.96, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 4, leader_direction: 1}
+    lower_rad: -0.5235987755982989, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 4, leader_direction: 1}
   J5: {servo_id: 5, direction: 1, gear_ratio: 1.0, home_raw: 2048, home_single: 2670,
     lower_rad: -2.96, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 3, leader_direction: -1}
   J6: {servo_id: 6, direction: 1, gear_ratio: 1.0, home_raw: 2048, home_single: 1622,
-    lower_rad: -2.96, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 2, leader_direction: -1}
+    lower_rad: -0.26179938779914946, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 2, leader_direction: -1}
   J7: {servo_id: 7, direction: -1, gear_ratio: 1.0, home_raw: 2048, home_single: 122,
     lower_rad: -2.96, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 1, leader_direction: 1}
   G_R: {servo_id: 8, direction: -1, gear_ratio: 1.0, home_raw: 2048, home_single: 1030,

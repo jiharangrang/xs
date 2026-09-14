@@ -11,6 +11,7 @@ from scipy.optimize import minimize
 
 from kinematics.fk import DEFAULT_MODEL_PATH, ForwardKinematics
 from kinematics.joints import as_joint_angles
+from kinematics.joint_limits import DEFAULT_CALIBRATION_PATH
 from kinematics.poses import as_pose, pose_error
 
 
@@ -126,19 +127,20 @@ def joint_motion_gradient(
 
 
 class InverseKinematics:
-    """FK 모델과 XML 관절 제한을 한 번 읽어 여러 상대 목표 자세의 IK를 계산한다."""
+    """FK 모델과 공통 관절 제한을 한 번 읽어 여러 상대 목표 자세의 IK를 계산한다."""
 
     def __init__(
-        self, model_path: str | Path = DEFAULT_MODEL_PATH, settings: IKSettings | None = None
+        self, model_path: str | Path = DEFAULT_MODEL_PATH, settings: IKSettings | None = None,
+        *, calibration_path: str | Path = DEFAULT_CALIBRATION_PATH,
     ) -> None:
         """FK와 설정을 준비하고 다중 시작값에 사용할 유한한 관절 범위를 읽는다."""
-        self.fk = ForwardKinematics(model_path)
+        self.fk = ForwardKinematics(model_path, calibration_path=calibration_path)
         self.settings = settings if settings is not None else IKSettings()
         self._limits = self.fk.joint_limits
         if not np.all(np.isfinite(self._limits)) or np.any(
             self._limits[:, 0] >= self._limits[:, 1]
         ):
-            raise ValueError("IK에는 각 팔 관절의 유한하고 유효한 XML range가 필요합니다.")
+            raise ValueError("IK에는 각 팔 관절의 유한하고 유효한 캘리브레이션 범위가 필요합니다.")
 
     def _pose_constraint(
         self, q_rad: NDArray[np.float64], target: NDArray[np.float64]
@@ -233,7 +235,7 @@ class InverseKinematics:
         lower = self._limits[:, 0]
         upper = self._limits[:, 1]
         if np.any(q_start < lower) or np.any(q_start > upper):
-            raise ValueError("실제 시작 관절각이 XML의 관절 범위를 벗어났습니다.")
+            raise ValueError("실제 시작 관절각이 캘리브레이션의 관절 범위를 벗어났습니다.")
 
         initial = self._validated_candidate(q_start, target, q_start)
         if initial is not None:

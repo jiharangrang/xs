@@ -83,22 +83,29 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.controller.reload_calibration.assert_called_once_with()
 
     async def test_real_controller_arrival_reaches_gui_for_absolute_and_relative_moves(self) -> None:
-        """실제 제어기와 제조사 SDK를 거친 세 카운트 도착 판정이 GUI에 전달된다."""
+        """단일·전체 이동이 실제 제어기와 SDK를 거쳐 도착 판정과 로그에 반영된다."""
         serial = FakeMotorChain()
         original_console = self.console
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "calibration.yaml"
             path.write_bytes(DEFAULT_CALIBRATION_PATH.read_bytes())
+            saved_calibration = path.read_bytes()
             with patch("scservo_sdk.port_handler.serial.Serial", return_value=serial):
                 with STS3215Bus("FAKE") as bus:
                     controller = JointController(bus, path)
                     self.console = Console(controller, MotorCalibration(bus, path))
                     try:
                         for route, body in (("/api/move", {"joint": "J1", "angle_deg": 5}),
-                                            ("/api/jog", {"joint": "J1", "delta_deg": 5})):
+                                            ("/api/jog", {"joint": "J1", "delta_deg": 5}),
+                                            ("/api/move-zero", {"speed_deg_s": 8})):
                             status, payload = await self._post(route, body)
                             self.assertEqual(status, 200)
                             self.assertEqual(payload["status"], "accepted")
+                            if route == "/api/move-zero":
+                                for device in serial.devices.values():
+                                    self.assertEqual(int.from_bytes(device[42:44], "little"), 2048)
+                                    self.assertEqual(int.from_bytes(device[46:48], "little"), 91)
+                                self.assertEqual(path.read_bytes(), saved_calibration)
                             target = int.from_bytes(serial.devices[1][42:44], "little")
                             for offset, expected in ((4, "moving"), (3, "arrived")):
                                 serial.devices[1][56:58] = (target + offset).to_bytes(2, "little")
@@ -108,7 +115,9 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
                                 self.assertEqual(joint["tolerance_deg"], controller.tolerance_for("J1"))
                                 self.assertIsNone(joint["error"])
                         rows = [json.loads(line) for line in controller.log_path.read_text().splitlines()]
-                        self.assertEqual(sum(row["event"] == "command_result" for row in rows), 2)
+                        self.assertEqual(sum(row["event"] == "command_result" for row in rows), 11)
+                        zero_commands = [row for row in rows if row["event"] == "command" and row.get("angle_deg") == 0]
+                        self.assertEqual({row["joint"] for row in zero_commands}, set(self.names))
                         samples = [row for row in rows if row["event"] == "sample"]
                         self.assertEqual({row["joint"] for row in samples}, set(self.names))
                         self.assertTrue(all("current_ma" in row and "pwm_percent" in row for row in samples))
@@ -134,6 +143,7 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
             await request
         try:
             for path, body in (("/api/move", {"joint": "J1", "angle_deg": 5}),
+                               ("/api/move-zero", {}),
                                ("/api/torque", {"enabled": True}),
                                ("/api/calibrate-zero", {})):
                 status, _ = await self._post(path, body)
@@ -144,6 +154,23 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.calibration.calibrate_all_zero.assert_called_once_with()
         self.controller.reload_calibration.assert_called_once_with()
         self.controller.move_to.assert_not_called()
+
+    async def test_all_zero_reports_failed_joints_without_changing_calibration(self) -> None:
+        """전체 영점 이동의 일부 실패를 알리고 영점 재설정은 호출하지 않는다."""
+        def move(name: str, angle_deg: float, *, speed_deg_s: float) -> None:
+            """두 관절에만 통신 오류를 주입한다."""
+            if name in ("J2", "J6"):
+                raise MotorError("응답 실패")
+
+        self.controller.move_to.side_effect = move
+        status, payload = await self._post("/api/move-zero", {"speed_deg_s": 8})
+        self.assertEqual(status, 400)
+        self.assertIn("J2", payload["detail"])
+        self.assertIn("J6", payload["detail"])
+        self.assertEqual(self.controller.move_to.call_count, 9)
+        self.calibration.save_zero.assert_not_called()
+        self.calibration.calibrate_all_zero.assert_not_called()
+        self.controller.reload_calibration.assert_not_called()
 
     async def test_all_stop_attempts_every_joint_and_reports_failures(self) -> None:
         """전체 정지에서 여러 관절이 실패해도 끝까지 시도하고 실패 대상을 반환한다."""

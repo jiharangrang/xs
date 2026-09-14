@@ -25,7 +25,7 @@ def main() -> None:
         "--grasp-distance-m", type=float, default=0.20,
         help="시작 각도 생략 시 파지 IK로 만들 양쪽 팁 간격(m)",
     )
-    parser.add_argument("--candidate", type=int, default=2, help="시작 각도 생략 시 사용할 파지 IK 후보 번호(기본 2)")
+    parser.add_argument("--candidate", type=int, default=1, help="시작 각도 생략 시 사용할 파지 IK 후보 번호(기본 1, 최저 비용)")
     parser.add_argument("--distance-m", type=float, default=0.10, help="L을 당길 거리(m)")
     parser.add_argument("--steps", type=int, default=20, help="직선을 나눌 구간 수")
     parser.add_argument("--duration-s", type=float, default=4.0, help="화면에서 재생할 시간(s), 모터 속도 계획과 별개")

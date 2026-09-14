@@ -20,9 +20,9 @@ class LinearMotionTests(unittest.TestCase):
     def setUp(self) -> None:
         """팁 간격이 이십 센티미터인 파지 IK에서 얻은 관절각과 단일 시작값 IK를 준비한다."""
         self.q_start = np.array([
-            -0.37212941711515096, -2.3077712878071632, -1.20734399978031e-7,
-            -1.4739499731590264, -1.2073433746511056e-7,
-            2.307771338941721, 0.37212957939444863,
+            -0.3721294996346982, -0.8338213396729492, -2.0284566431945047e-9,
+            1.4739499730900032, -2.1845553927621266e-9,
+            0.8338213406241354, 0.37212949683055974,
         ])
         self.solver = InverseKinematics(settings=IKSettings(starts=1))
         self.start = self.solver.fk.forward(self.q_start)

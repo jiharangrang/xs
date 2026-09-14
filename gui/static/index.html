@@ -33,7 +33,7 @@ body{
 }
 .mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
 button{font:inherit; color:inherit; border:none; background:none; cursor:pointer}
-button:focus-visible,input:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 input{font:inherit; color:inherit}
 
 .app{display:flex; flex-direction:column; height:100%}
@@ -58,7 +58,7 @@ header h1{margin:0; font-size:14px; font-weight:500; letter-spacing:-.01em}
 
 main{flex:1 1 auto; display:grid; grid-template-columns:212px 1fr; min-height:0}
 
-aside{background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; padding:8px}
+aside{display:flex; flex-direction:column; gap:16px; background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; padding:8px}
 .jrow{
   display:flex; align-items:center; gap:10px; width:100%; text-align:left;
   padding:9px 11px; border-radius:7px; color:var(--ink-2);
@@ -104,9 +104,14 @@ section{display:flex; flex-direction:column; align-items:center; justify-content
   font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; font-size:14px; width:100%;
 }
 .actions{display:grid; grid-template-columns:1fr 1fr; gap:8px}
-.calibration{border-top:1px solid var(--line); margin-top:6px; padding-top:12px}
-.calibration p{margin:0 0 9px; color:var(--ink-2); font-size:11.5px; line-height:1.5}
-.calibration-actions{display:grid; grid-template-columns:1fr 1.5fr; gap:8px}
+.all-actions{display:grid; grid-template-columns:1fr 1fr; gap:8px; border-top:1px solid var(--line); margin-top:6px; padding-top:16px}
+.calibration{border-top:1px solid var(--line); margin-top:auto; padding:12px 4px 4px}
+.calibration summary{display:flex; justify-content:space-between; align-items:center; padding:6px; color:var(--ink-2); font-size:12px; cursor:pointer; list-style:none}
+.calibration summary::-webkit-details-marker{display:none}
+.calibration summary span{transition:transform .15s}
+.calibration[open] summary span{transform:rotate(180deg)}
+.calibration p{margin:10px 6px 12px; color:var(--ink-2); font-size:11.5px; line-height:1.6}
+.calibration .btn{width:100%; font-size:12px}
 
 .toast{
   position:fixed; left:50%; bottom:26px; transform:translate(-50%,14px);
@@ -130,7 +135,14 @@ section{display:flex; flex-direction:column; align-items:center; justify-content
   </header>
 
   <main>
-    <aside id="list"></aside>
+    <aside>
+      <nav id="list" aria-label="관절 선택"></nav>
+      <details class="calibration" id="calibration-settings">
+        <summary>영점 설정<span aria-hidden="true">⌄</span></summary>
+        <p>전체 토크를 해제하고 기준 자세로 맞춘 뒤 사용하세요. 현재 자세를 새로운 0°로 저장합니다.</p>
+        <button class="btn" id="calibrate-all">전체 중점·영점 설정</button>
+      </details>
+    </aside>
     <section>
       <span class="title" id="jname">—</span>
       <div class="gauge">
@@ -160,12 +172,9 @@ section{display:flex; flex-direction:column; align-items:center; justify-content
           <button class="btn" id="torque">토크 해제</button>
           <button class="btn danger" id="stop">정지</button>
         </div>
-        <div class="calibration">
-          <p>전체 토크를 해제하고 시뮬레이션의 영점 자세로 맞춰 주세요.<br>현재 자세를 모터 중점(raw 2048)·관절 0°로 저장합니다.</p>
-          <div class="calibration-actions">
-            <button class="btn" id="release-all">전체 토크 해제</button>
-            <button class="btn" id="calibrate-all">전체 중점·영점 설정</button>
-          </div>
+        <div class="all-actions">
+          <button class="btn" id="move-all-zero">전체 0°로 이동</button>
+          <button class="btn" id="release-all">전체 토크 해제</button>
         </div>
       </div>
     </section>
@@ -183,6 +192,7 @@ let connectionState = "연결 대기";
 let lastStateError = "";
 let stateTimer;
 let calibrationBusy = false;
+let zeroMoveBusy = false;
 const lastMotionWarnings = new Map();
 
 function toast(message, success = false){
@@ -246,7 +256,9 @@ function paint(){
   const available = !!joint && !joint.error;
   document.querySelectorAll("[data-jog], #move, #torque").forEach(button => { button.disabled = calibrationBusy || !available; });
   $("release-all").disabled = calibrationBusy || selected === null;
-  $("calibrate-all").disabled = calibrationBusy || selected === null;
+  $("move-all-zero").disabled = calibrationBusy || zeroMoveBusy || !allResponding;
+  $("move-all-zero").textContent = zeroMoveBusy ? "명령 전송 중…" : "전체 0°로 이동";
+  $("calibrate-all").disabled = calibrationBusy || zeroMoveBusy || selected === null;
   $("calibrate-all").textContent = calibrationBusy ? "설정 중…" : "전체 중점·영점 설정";
   $("stop").disabled = selected === null;
   $("needle").style.visibility = available ? "visible" : "hidden";
@@ -286,7 +298,18 @@ $("torque").addEventListener("click", () => {
   if (joint && !joint.error) send("/api/torque", {joint: selected, enabled: !joint.torque});
 });
 $("release-all").addEventListener("click", async () => {
-  if (await send("/api/torque", {joint: null, enabled: false})) toast("전체 토크를 해제했습니다. 기준 자세로 맞춰 주세요.", true);
+  if (await send("/api/torque", {joint: null, enabled: false})) toast("전체 토크를 해제했습니다.", true);
+});
+$("move-all-zero").addEventListener("click", async () => {
+  if (zeroMoveBusy || calibrationBusy) return;
+  zeroMoveBusy = true;
+  paint();
+  try {
+    if (await send("/api/move-zero", {speed_deg_s: speed()})) toast("전체 관절에 0° 이동을 명령했습니다.", true);
+  } finally {
+    zeroMoveBusy = false;
+    paint();
+  }
 });
 $("calibrate-all").addEventListener("click", async () => {
   if (calibrationBusy) return;

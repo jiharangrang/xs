@@ -158,6 +158,13 @@ class Console:
         self._require_idle_calibration()
         await self.run(lambda: self._controller.move_to(joint, angle_deg, speed_deg_s=speed_deg_s))
 
+    async def move_all_zero(self, speed_deg_s: float) -> None:
+        """모든 관절에 저장된 영점으로의 이동 명령을 차례로 전송한다."""
+        self._require_idle_calibration()
+        await self.run(lambda: self._apply_all(
+            self.joint_names, lambda name: self._controller.move_to(name, 0.0, speed_deg_s=speed_deg_s),
+        ))
+
     async def jog(self, joint: str, delta_deg: float, speed_deg_s: float) -> None:
         """현재 각도 기준 상대 이동을 전송한다."""
         self._require_idle_calibration()
@@ -192,6 +199,12 @@ class JogRequest(BaseModel):
 
     joint: str
     delta_deg: float
+    speed_deg_s: float = 10.0
+
+
+class ZeroMoveRequest(BaseModel):
+    """모든 관절을 저장된 영점으로 이동시키는 요청이다."""
+
     speed_deg_s: float = 10.0
 
 
@@ -267,6 +280,15 @@ def create_app(port: str | None, baudrate: int | None) -> FastAPI:
         targets(request.joint)
         try:
             await console().jog(request.joint, request.delta_deg, request.speed_deg_s)
+        except BUS_ERRORS as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return {"ok": True, "status": "accepted"}
+
+    @app.post("/api/move-zero")
+    async def move_zero(request: ZeroMoveRequest) -> dict:
+        """영점 설정을 바꾸지 않고 전체 관절에 영점 이동을 명령한다."""
+        try:
+            await console().move_all_zero(request.speed_deg_s)
         except BUS_ERRORS as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return {"ok": True, "status": "accepted"}

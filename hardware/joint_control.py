@@ -11,9 +11,9 @@ import yaml
 
 from hardware.sts3215 import MotorError, STS3215Bus
 from hardware.motor_logging import MotorLogger
+from kinematics.joint_limits import DEFAULT_CALIBRATION_PATH, limits_from_document
 
 
-DEFAULT_CALIBRATION_PATH = Path(__file__).resolve().parents[1] / "models/xs/calibration.yaml"
 COUNTS_PER_REVOLUTION = 4096
 ACCELERATION_UNIT = 100
 # 추가 감속비가 일일 때 세 카운트에 해당하는 각도 허용치: $$\epsilon_\theta=3\cdot360/N$$
@@ -170,6 +170,7 @@ def load_joint_calibration(path: Path) -> tuple[dict, dict[str, JointCalibration
         names = document["joint_order"]
         if not isinstance(names, list) or not names or len(names) != len(set(names)):
             raise ValueError("관절 순서가 비어 있거나 중복되었습니다.")
+        limits = limits_from_document(document, names)
         result = {}
         for name in names:
             entry = document["joints"][name]
@@ -178,8 +179,8 @@ def load_joint_calibration(path: Path) -> tuple[dict, dict[str, JointCalibration
                 zero_raw = entry["home_single"]
             result[name] = JointCalibration(
                 entry["servo_id"], entry["direction"], entry["gear_ratio"], zero_raw,
-                math.degrees(_finite("최소 각도", entry["lower_rad"])),
-                math.degrees(_finite("최대 각도", entry["upper_rad"])),
+                math.degrees(limits[name][0]),
+                math.degrees(limits[name][1]),
                 math.degrees(_finite("최대 속도", entry["max_speed_rad_s"])),
             )
         if len({item.servo_id for item in result.values()}) != len(result):

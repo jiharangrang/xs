@@ -1,19 +1,20 @@
 """목표 자세 도달, 관절 제한의 출처, 비용과 실패 시 반환 계약을 검증한다."""
 
 from pathlib import Path
-import shutil
 import tempfile
 import unittest
-import xml.etree.ElementTree as ET
 
 import mujoco
 import numpy as np
 from numpy.testing import assert_allclose, assert_array_equal
 from scipy.optimize import check_grad
+import yaml
 
+from hardware.joint_control import load_joint_calibration
 from kinematics.fk import DEFAULT_MODEL_PATH, ForwardKinematics
 from kinematics.ik import IKCandidate, IKSettings, InverseKinematics, joint_motion_cost, joint_motion_gradient
 from kinematics.joints import ARM_JOINT_NAMES
+from kinematics.joint_limits import DEFAULT_CALIBRATION_PATH
 from kinematics.poses import as_pose, pose_error
 from planning.targets import beam_grasp_target
 
@@ -96,21 +97,30 @@ class InverseKinematicsTests(unittest.TestCase):
         self.assertEqual(result.attempts, 2)
         self.assertEqual(result.candidates, ())
 
-    def test_limits_follow_xml_and_ignore_calibration_yaml(self) -> None:
-        """별도 XML의 관절 범위를 바꾸면 IK가 그 범위를 직접 사용하는지 확인한다."""
-        tree = ET.parse(DEFAULT_MODEL_PATH)
-        for mesh in tree.findall("./asset/mesh"):
-            mesh.set("file", str(DEFAULT_MODEL_PATH.parent / mesh.get("file")))
-        joint = tree.find(".//joint[@name='J1']")
-        joint.set("range", "-0.1 0.2")
+    def test_limits_follow_calibration_for_both_ik_and_hardware(self) -> None:
+        """캘리브레이션 변경이 XML 수정 없이 IK와 실물 제어에 같은 범위로 적용된다."""
+        document = yaml.safe_load(DEFAULT_CALIBRATION_PATH.read_text())
+        document["joints"]["J1"].update(lower_rad=-0.1, upper_rad=0.2)
         with tempfile.TemporaryDirectory() as directory:
-            model_path = Path(directory) / "model.xml"
-            shutil.copy2(DEFAULT_MODEL_PATH.parent / "camera_frames.xml", model_path.parent / "camera_frames.xml")
-            tree.write(model_path)
-            solver = InverseKinematics(model_path)
+            path = Path(directory) / "calibration.yaml"
+            path.write_text(yaml.safe_dump(document))
+            solver = InverseKinematics(calibration_path=path)
             assert_allclose(solver.fk.joint_limits[0], [-0.1, 0.2])
+            _, hardware = load_joint_calibration(path)
+            hardware_limits = [[hardware[name].lower_deg, hardware[name].upper_deg] for name in ARM_JOINT_NAMES]
+            assert_allclose(np.rad2deg(solver.fk.joint_limits), hardware_limits)
             with self.assertRaises(ValueError):
                 solver.solve(beam_grasp_target(), [0.3, 0, 0, 0, 0, 0, 0])
+
+    def test_new_one_sided_limits_reject_previously_allowed_start_poses(self) -> None:
+        """각기 제한된 세 방향의 범위 밖 시작 자세를 이미 목표인 경우에도 거부한다."""
+        solver = InverseKinematics()
+        for index, angle in ((1, 30), (3, -35), (5, -20)):
+            q_start = np.zeros(7)
+            q_start[index] = np.deg2rad(angle)
+            target = solver.fk.forward(q_start).T_tip_L_tip_R
+            with self.subTest(index=index), self.assertRaisesRegex(ValueError, "캘리브레이션"):
+                solver.solve(target, q_start)
 
     def test_rejects_invalid_pose_angles_and_settings(self) -> None:
         """잘못된 입력을 계산 시작 전에 거부하는지 확인한다."""

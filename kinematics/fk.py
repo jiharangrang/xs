@@ -10,6 +10,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from kinematics.joints import ARM_JOINT_NAMES, as_joint_angles
+from kinematics.joint_limits import DEFAULT_CALIBRATION_PATH, load_joint_limits
 
 
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / "xs" / "model.xml"
@@ -95,7 +96,10 @@ class ForwardKinematics:
     월드 출력은 XML 배치 기준이며, 다른 고정점 배치는 TipAnchor.place에서 적용한다.
     """
 
-    def __init__(self, model_path: str | Path = DEFAULT_MODEL_PATH) -> None:
+    def __init__(
+        self, model_path: str | Path = DEFAULT_MODEL_PATH,
+        *, calibration_path: str | Path = DEFAULT_CALIBRATION_PATH,
+    ) -> None:
         """모델을 읽고 팔 관절의 상태 주소와 양쪽 팁의 식별자를 준비한다."""
         self._model = mujoco.MjModel.from_xml_path(str(model_path))
         self._data = mujoco.MjData(self._model)
@@ -104,21 +108,18 @@ class ForwardKinematics:
         if np.any(self._model.jnt_type[joint_ids] != mujoco.mjtJoint.mjJNT_HINGE):
             raise ValueError("J1부터 J7까지는 모두 회전 관절이어야 합니다.")
         self._qpos_indices = self._model.jnt_qposadr[joint_ids].copy()
-        self._joint_ids = np.asarray(joint_ids)
         self._tip_L_id = self._model.site("tip_L").id
         self._tip_R_id = self._model.site("tip_R").id
+        limits = load_joint_limits(ARM_JOINT_NAMES, calibration_path)
+        self._joint_limits = np.array([limits[name] for name in ARM_JOINT_NAMES])
 
     @property
     def joint_limits(self) -> NDArray[np.float64]:
-        """XML에 지정된 팔 관절의 하한·상한을 관절 순서대로 복사해 반환한다.
+        """실물과 공유하는 캘리브레이션의 팔 관절 하한·상한을 복사해 반환한다.
 
         각 행은 해당 관절의 하한과 상한(rad)이다.
-        XML에서 제한이 꺼진 관절은 음의 무한대와 양의 무한대로 표현한다.
         """
-        limits = self._model.jnt_range[self._joint_ids].copy()
-        unlimited = ~self._model.jnt_limited[self._joint_ids].astype(bool)
-        limits[unlimited] = [-np.inf, np.inf]
-        return limits
+        return self._joint_limits.copy()
 
     def forward(self, q_rad: ArrayLike) -> FKResult:
         """팔 관절각을 적용하고 양쪽 팁의 월드 자세와 상대 자세를 반환한다.
