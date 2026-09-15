@@ -276,6 +276,44 @@ class STS3215Bus:
             raise MotorError(f"모터 {servo_id}의 토크 상태 {torque}에서는 이동할 수 없습니다.")
         self._call(servo_id, "WritePosEx", position, speed, acceleration)
 
+    def move_many(self, targets: dict[int, tuple[int, int, int]]) -> None:
+        """모터별 위치·속도·가속도를 검사한 뒤 하나의 동기 쓰기 패킷으로 전송한다.
+
+        각 값은 위치·속도·가속도 순서의 raw 단위다. 응답 없는 전송이므로 도착은 별도로 읽는다.
+        """
+        if not targets or len(targets) > 30:
+            raise ValueError("묶음 이동에는 모터 1개부터 30개까지 지정할 수 있습니다.")
+        for servo_id, (position, speed, acceleration) in targets.items():
+            _check_integer("모터 ID", servo_id, 0, 253)
+            _check_integer("목표 위치", position, 0, 4095)
+            _check_integer("속도", speed, 1, 3400)
+            _check_integer("가속도", acceleration, 1, 254)
+        disabled = []
+        for servo_id, (position, _, _) in targets.items():
+            self._check_position_target(servo_id, position)
+            if not self.read_torque(servo_id):
+                current = self.read_position(servo_id)
+                self._check_position_target(servo_id, current)
+                disabled.append(servo_id)
+
+        group = self._sdk.groupSyncWrite
+        group.clearParam()
+        try:
+            for servo_id, (position, speed, acceleration) in targets.items():
+                if not self._sdk.SyncWritePosEx(servo_id, position, speed, acceleration):
+                    raise MotorError(f"모터 {servo_id}의 묶음 명령을 구성하지 못했습니다.")
+            for servo_id in disabled:
+                self.set_torque(servo_id, True)
+            result = group.txPacket()
+            if result != COMM_SUCCESS:
+                raise MotorError(f"묶음 이동 전송 실패: {self._sdk.getTxRxResult(result)}",
+                                 communication_result=result)
+        except (OSError, IndexError) as error:
+            raise MotorError(f"묶음 이동 통신 실패: {error}") from error
+        finally:
+            group.clearParam()
+            self._port.is_using = False
+
     def stop(self, servo_id: int) -> int:
         """현재 읽은 위치를 새 목표로 전송해 이동을 멈추며 토크 상태는 유지한다."""
         position = self.read_position(servo_id)

@@ -77,7 +77,7 @@ class SimulationCameraTests(unittest.TestCase):
         socket.__enter__.return_value.recv.return_value = '{"joints": [], "error": "disconnected"}'
         with patch("websockets.sync.client.connect", return_value=socket):
             with self.assertRaises(ValueError):
-                read_joint_snapshot("ws://127.0.0.1:8000/ws")
+                read_joint_snapshot("ws://127.0.0.1:18765/ws")
 
 
 if __name__ == "__main__":

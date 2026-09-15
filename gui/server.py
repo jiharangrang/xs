@@ -4,23 +4,28 @@
 
 import argparse
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Callable, TypeVar
+from typing import Annotated, Callable, TypeVar
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 import uvicorn
 
 from hardware.calibration import MotorCalibration
 from hardware.joint_control import JointController
 from hardware.ports import resolve_port_settings
 from hardware.sts3215 import MotorError, STS3215Bus
+from kinematics.joints import ARM_JOINT_NAMES
 
 
 INDEX_PATH = Path(__file__).resolve().parent / "static" / "index.html"
+LAST_POSE_PATH = INDEX_PATH.parents[2] / ".local" / "last_pose.json"
 POLL_INTERVAL_S = 0.2
 BUS_ERRORS = (ValueError, MotorError, OSError)
 T = TypeVar("T")
@@ -78,6 +83,9 @@ class Console:
             "error_deg": state.error_deg,
             "tolerance_deg": state.tolerance_deg,
             "motion_status": state.motion_status,
+            "command_id": state.command_id,
+            "error_raw": state.error_raw,
+            "tolerance_raw": state.tolerance_raw,
             "error": None,
         }
 
@@ -165,6 +173,42 @@ class Console:
             self.joint_names, lambda name: self._controller.move_to(name, 0.0, speed_deg_s=speed_deg_s),
         ))
 
+    async def last_pose(self) -> dict | None:
+        """재실행을 위해 저장한 몸통 목표 각도를 읽으며 모터에는 명령하지 않는다."""
+        def read() -> dict | None:
+            """저장 파일이 있으면 관절 구성과 숫자 형식을 확인해 전달한다."""
+            if not LAST_POSE_PATH.exists():
+                return None
+            request = PoseRequest.model_validate_json(LAST_POSE_PATH.read_text())
+            if set(request.angles_deg) != set(ARM_JOINT_NAMES):
+                raise ValueError("저장된 자세에는 J1~J7 목표 각도가 모두 있어야 합니다.")
+            return {"angles_deg": request.angles_deg}
+
+        return await self.run(read)
+
+    async def move_pose(self, angles_deg: dict[str, float], remember: bool = True) -> dict:
+        """기존 통신 연결에서 목표 각도를 묶어 전송하고 관절별 명령 번호를 반환한다."""
+        self._require_idle_calibration()
+
+        def send() -> dict:
+            """전송과 명령 번호 수집 사이에 다른 명령이 끼어들지 않게 한다."""
+            targets_deg = self._controller.move_many(angles_deg)
+            result = {"targets_deg": targets_deg,
+                      "command_ids": {joint: self._controller.command_id(joint) for joint in targets_deg},
+                      "log_path": str(self._controller.log_path)}
+            if remember and set(ARM_JOINT_NAMES).issubset(angles_deg):
+                saved = {"angles_deg": {name: angles_deg[name] for name in ARM_JOINT_NAMES}}
+                try:
+                    LAST_POSE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                    temporary = LAST_POSE_PATH.with_suffix(".tmp")
+                    temporary.write_text(json.dumps(saved, indent=2) + "\n")
+                    temporary.replace(LAST_POSE_PATH)
+                except OSError as error:
+                    result["pose_save_error"] = f"이동은 전송했지만 최근 자세 저장에 실패했습니다: {error}"
+            return result
+
+        return await self.run(send)
+
     async def jog(self, joint: str, delta_deg: float, speed_deg_s: float) -> None:
         """현재 각도 기준 상대 이동을 전송한다."""
         self._require_idle_calibration()
@@ -194,12 +238,20 @@ class MoveRequest(BaseModel):
     speed_deg_s: float = 10.0
 
 
+class PoseRequest(BaseModel):
+    """관절 이름별 도 단위 목표를 한 번에 전달하는 자세 요청이다."""
+
+    angles_deg: dict[str, Annotated[float, Field(strict=True, allow_inf_nan=False)]] = Field(min_length=1)
+    remember: bool = Field(default=True, strict=True)
+
+
 class JogRequest(BaseModel):
     """상대 이동 요청이다."""
 
     joint: str
     delta_deg: float
     speed_deg_s: float = 10.0
+
 
 
 class ZeroMoveRequest(BaseModel):
@@ -241,6 +293,13 @@ def create_app(port: str | None, baudrate: int | None) -> FastAPI:
             bus.close()
 
     app = FastAPI(title="인치웜 관절 콘솔", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],
+        allow_methods=["GET", "POST"], allow_headers=["Content-Type"],
+    )
+    app.mount("/gui/static", StaticFiles(directory=INDEX_PATH.parent), name="gui-static")
+    app.mount("/models/xs", StaticFiles(directory=INDEX_PATH.parents[2] / "models" / "xs"), name="robot-model")
 
     def console() -> Console:
         """이 서버가 공유하는 관절 콘솔을 반환한다."""
@@ -273,6 +332,23 @@ def create_app(port: str | None, baudrate: int | None) -> FastAPI:
         except BUS_ERRORS as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return {"ok": True, "status": "accepted"}
+
+    @app.get("/api/pose/last")
+    async def last_pose() -> dict:
+        """초기 자세 이동과 그리퍼 조작을 제외하고 마지막 몸통 목표를 반환한다."""
+        try:
+            return {"pose": await console().last_pose()}
+        except BUS_ERRORS as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.post("/api/pose")
+    async def move_pose(request: PoseRequest) -> dict:
+        """관절각 전체를 동기 전송하며 도착 결과는 기존 상태 스트림에서 전달한다."""
+        try:
+            result = await console().move_pose(request.angles_deg, request.remember)
+        except BUS_ERRORS as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return {"ok": True, "status": "accepted", **result}
 
     @app.post("/api/jog")
     async def jog(request: JogRequest) -> dict:
@@ -367,7 +443,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="인치웜 관절 콘솔 서버")
     parser.add_argument("--port", help="생략하면 저장된 직렬 포트 사용")
     parser.add_argument("--baudrate", type=int, help="생략하면 선택한 포트의 통신 속도 사용")
-    parser.add_argument("--http-port", type=int, default=8000, help="화면을 여는 주소의 포트")
+    parser.add_argument("--http-port", type=int, default=18765, help="화면을 여는 주소의 포트")
     args = parser.parse_args(argv)
     print(f"화면 주소: http://127.0.0.1:{args.http_port}", flush=True)
     uvicorn.run(create_app(args.port, args.baudrate), host="127.0.0.1", port=args.http_port)

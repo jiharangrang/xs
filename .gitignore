@@ -9,6 +9,8 @@ MUJOCO_LOG.TXT
 
 # 이 컴퓨터에서 선택한 모터 통신 포트
 .local/motor_port.json
+.local/last_pose.json
+.local/last_pose.tmp
 
 # 실행마다 자동 저장되는 모터 진단 로그
 logs/motors/

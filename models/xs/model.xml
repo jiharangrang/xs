@@ -35,55 +35,55 @@
       <!-- 끝단 기준은 회전축과 안쪽 접촉 평면의 교점이며, 위치와 방향은 그리퍼 몸체 기준이다. -->
       <site name="tip_L" pos="0 0 0.041530662041" quat="1 0 0 0" type="sphere" size="0.0015" rgba="0 0.7 1 1"/>
       <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
-      <geom name="gripper_L_geom_0" type="mesh" mesh="gripper_L_0_minus_finger" pos="0.000000 -0.036360 -0.200000" quat="0.000000 0.707107 0.000000 -0.707107" rgba="0.550000 0.350000 0.600000 1.000000" contype="0" conaffinity="0"/>
+      <geom name="gripper_L_geom_0" type="mesh" mesh="gripper_L_0_minus_finger" pos="0.000000 -0.036360 -0.200000" quat="0.000000 0.707107 0.000000 -0.707107" rgba="0.055 0.065 0.080 1" contype="0" conaffinity="0"/>
       <body name="gripper_L_thumb" pos="0.000000 -0.038260 0.017381" quat="0.500000 0.500000 -0.500000 -0.500000">
         <!-- CAD 참고 위치(mm): $$(-217.381, 1.9, 0)$$. 실행 좌표는 위 body 변환을 사용한다. -->
         <!-- CAD에서 본 관절 좌표축: $$x=(0,1,0),\ y=(-1,0,0),\ z=(0,0,1)$$. -->
         <joint name="G_L" type="hinge" axis="0.000000 0.000000 1.000000" range="-4.712389 4.712389"/>
         <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
-        <geom name="gripper_L_thumb_geom_0" type="mesh" mesh="gripper_L_thumb_0_minus_thumb" pos="-0.001900 -0.217381 0.000000" quat="0.707107 0.000000 0.000000 -0.707107" rgba="0.550000 0.350000 0.600000 1.000000" contype="0" conaffinity="0"/>
+        <geom name="gripper_L_thumb_geom_0" type="mesh" mesh="gripper_L_thumb_0_minus_thumb" pos="-0.001900 -0.217381 0.000000" quat="0.707107 0.000000 0.000000 -0.707107" rgba="0.055 0.065 0.080 1" contype="0" conaffinity="0"/>
       </body>
       <body name="shoulder_L" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
         <joint name="J1" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
         <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
-        <geom name="shoulder_L_geom_0" type="mesh" mesh="shoulder_L_0_link1" pos="0.000000 -0.036360 -0.200000" quat="0.000000 0.707107 0.000000 -0.707107" rgba="0.250000 0.250000 0.280000 1.000000" contype="0" conaffinity="0"/>
+        <geom name="shoulder_L_geom_0" type="mesh" mesh="shoulder_L_0_link1" pos="0.000000 -0.036360 -0.200000" quat="0.000000 0.707107 0.000000 -0.707107" rgba="0.88 0.80 0.50 1" contype="0" conaffinity="0"/>
         <body name="upper_L" pos="0.000000 -0.036360 -0.074200" quat="0.500000 0.500000 0.500000 -0.500000">
           <joint name="J2" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
           <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
-          <geom name="upper_L_geom_0" type="mesh" mesh="upper_L_0_link2" pos="0.125800 0.000000 0.000000" quat="0.707107 0.707107 0.000000 0.000000" rgba="0.700000 0.700000 0.720000 1.000000" contype="0" conaffinity="0"/>
+          <geom name="upper_L_geom_0" type="mesh" mesh="upper_L_0_link2" pos="0.125800 0.000000 0.000000" quat="0.707107 0.707107 0.000000 0.000000" rgba="0.88 0.80 0.50 1" contype="0" conaffinity="0"/>
           <body name="forearm_L" pos="0.036360 0.000000 0.026640" quat="0.000000 0.707107 0.000000 0.707107">
             <joint name="J3" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
             <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
-            <geom name="forearm_L_geom_0" type="mesh" mesh="forearm_L_0_middlelink1" pos="-0.026640 0.000000 0.089440" quat="-0.500000 0.500000 0.500000 0.500000" rgba="0.250000 0.700000 0.750000 1.000000" contype="0" conaffinity="0"/>
+            <geom name="forearm_L_geom_0" type="mesh" mesh="forearm_L_0_middlelink1" pos="-0.026640 0.000000 0.089440" quat="-0.500000 0.500000 0.500000 0.500000" rgba="0.22 0.70 0.88 1" contype="0" conaffinity="0"/>
             <body name="forearm_R" pos="-0.026640 0.000000 0.089440" quat="0.707107 0.000000 -0.707107 0.000000">
               <joint name="J4" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
               <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
-              <geom name="forearm_R_geom_0" type="mesh" mesh="forearm_R_0_middlelink2" pos="0.000000 0.000000 0.000000" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.250000 0.700000 0.750000 1.000000" contype="0" conaffinity="0"/>
+              <geom name="forearm_R_geom_0" type="mesh" mesh="forearm_R_0_middlelink2" pos="0.000000 0.000000 0.000000" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.22 0.70 0.88 1" contype="0" conaffinity="0"/>
               <body name="upper_R" pos="0.089440 0.000000 0.026640" quat="0.707107 0.000000 -0.707107 0.000000">
                 <joint name="J5" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
                 <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
-                <geom name="upper_R_geom_0" type="mesh" mesh="upper_R_0_link5" pos="-0.026640 0.000000 0.089440" quat="-0.500000 0.500000 -0.500000 -0.500000" rgba="0.700000 0.700000 0.720000 1.000000" contype="0" conaffinity="0"/>
+                <geom name="upper_R_geom_0" type="mesh" mesh="upper_R_0_link5" pos="-0.026640 0.000000 0.089440" quat="-0.500000 0.500000 -0.500000 -0.500000" rgba="0.055 0.065 0.080 1" contype="0" conaffinity="0"/>
                 <body name="shoulder_R" pos="-0.026640 0.000000 -0.036360" quat="0.000000 0.707107 0.000000 0.707107">
                   <joint name="J6" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
                   <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
-                  <geom name="shoulder_R_geom_0" type="mesh" mesh="shoulder_R_0_link6" pos="0.125800 0.000000 0.000000" quat="0.000000 0.000000 0.707107 -0.707107" rgba="0.250000 0.250000 0.280000 1.000000" contype="0" conaffinity="0"/>
+                  <geom name="shoulder_R_geom_0" type="mesh" mesh="shoulder_R_0_link6" pos="0.125800 0.000000 0.000000" quat="0.000000 0.000000 0.707107 -0.707107" rgba="0.055 0.065 0.080 1" contype="0" conaffinity="0"/>
                   <!-- 현재 Fusion 아래쪽 앵커와 카메라를 CAD 전역 좌표 그대로 내보내 링크6에 고정한다. -->
                   <!-- 시각화용 형상이므로 기존 링크 관성 및 충돌 설정을 유지한다. -->
-                  <geom name="cam_set_xs_visual" type="mesh" mesh="cam_set_xs" pos="0.125800 0 0" quat="0 0 0.707107 -0.707107" rgba="0.85 0.55 0.18 1" mass="0" contype="0" conaffinity="0" group="1"/>
-                  <geom name="gemini_215_visual" type="mesh" mesh="gemini_215" pos="0.125800 0 0" quat="0 0 0.707107 -0.707107" rgba="0.18 0.25 0.32 1" mass="0" contype="0" conaffinity="0" group="2"/>
+                  <geom name="cam_set_xs_visual" type="mesh" mesh="cam_set_xs" pos="0.125800 0 0" quat="0 0 0.707107 -0.707107" rgba="0.055 0.065 0.080 1" mass="0" contype="0" conaffinity="0" group="1"/>
+                  <geom name="gemini_215_visual" type="mesh" mesh="gemini_215" pos="0.125800 0 0" quat="0 0 0.707107 -0.707107" rgba="0.035 0.040 0.050 1" mass="0" contype="0" conaffinity="0" group="2"/>
                   <include file="camera_frames.xml"/>
                   <body name="gripper_R" pos="-0.074200 0.000000 -0.036360" quat="-0.500000 0.500000 0.500000 -0.500000">
                     <!-- 끝단 기준은 회전축과 안쪽 접촉 평면의 교점이며, 위치와 방향은 그리퍼 몸체 기준이다. -->
                     <site name="tip_R" pos="0 0 0.041530662041" quat="1 0 0 0" type="sphere" size="0.0015" rgba="1 0.27 0.08 1"/>
                     <joint name="J7" type="hinge" axis="0.000000 0.000000 1.000000" range="-2.960000 2.960000"/>
                     <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
-                    <geom name="gripper_R_geom_0" type="mesh" mesh="gripper_R_0_plus_finger" pos="0.000000 -0.036360 -0.200000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.550000 0.350000 0.600000 1.000000" contype="0" conaffinity="0"/>
+                    <geom name="gripper_R_geom_0" type="mesh" mesh="gripper_R_0_plus_finger" pos="0.000000 -0.036360 -0.200000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.055 0.065 0.080 1" contype="0" conaffinity="0"/>
                     <body name="gripper_R_thumb" pos="0.000000 -0.038260 0.017381" quat="0.500000 0.500000 -0.500000 -0.500000">
                       <!-- CAD 참고 위치(mm): $$(217.381, -1.9, 0)$$. 실행 좌표는 위 body 변환을 사용한다. -->
                       <!-- CAD에서 본 관절 좌표축: $$x=(0,-1,0),\ y=(1,0,0),\ z=(0,0,1)$$. -->
                       <joint name="G_R" type="hinge" axis="0.000000 0.000000 1.000000" range="-4.712389 4.712389"/>
                       <inertial pos="0 0 0" mass="0.150000" diaginertia="1.000000e-04 1.000000e-04 1.000000e-04"/>
-                      <geom name="gripper_R_thumb_geom_0" type="mesh" mesh="gripper_R_thumb_0_plus_thumb" pos="-0.001900 -0.217381 0.000000" quat="0.707107 0.000000 0.000000 0.707107" rgba="0.550000 0.350000 0.600000 1.000000" contype="0" conaffinity="0"/>
+                      <geom name="gripper_R_thumb_geom_0" type="mesh" mesh="gripper_R_thumb_0_plus_thumb" pos="-0.001900 -0.217381 0.000000" quat="0.707107 0.000000 0.000000 0.707107" rgba="0.055 0.065 0.080 1" contype="0" conaffinity="0"/>
                     </body>
                   </body>
                 </body>

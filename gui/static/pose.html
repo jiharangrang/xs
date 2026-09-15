@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>인치웜 자세 편집기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F7F8F9; --panel:#FFFFFF; --sunk:#EFF1F3; --stage:#E8EBEE;
+  --ink:#15191E; --ink-2:#626D78; --ink-3:#9AA4AE;
+  --line:#E3E7EA; --line-2:#CFD6DC;
+  --accent:#0E7C86; --accent-ink:#FFFFFF; --accent-wash:#E0EFF1;
+  --grip:#7B5CA8;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0F1317; --panel:#161C22; --sunk:#1D242B; --stage:#11161B;
+    --ink:#E7EBEF; --ink-2:#97A4B0; --ink-3:#65707B;
+    --line:#242C34; --line-2:#323C46;
+    --accent:#3FC3CE; --accent-ink:#062329; --accent-wash:#13323A;
+    --grip:#A88CD0;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink); overflow:hidden;
+  font-family:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
+  font-size:13px; -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+button{font:inherit; color:inherit; border:none; background:none; cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+button:disabled{opacity:.4; cursor:default; pointer-events:none}
+
+.app{display:flex; flex-direction:column; height:100%}
+header{
+  display:flex; align-items:center; gap:10px; height:52px; padding:0 16px; flex:0 0 auto;
+  background:var(--panel); border-bottom:1px solid var(--line);
+}
+header h1{margin:0; font-size:14px; font-weight:500; letter-spacing:-.01em}
+.views{display:flex; gap:0; margin-left:14px; border:1px solid var(--line-2); border-radius:7px; overflow:hidden}
+.views button{height:30px; padding:0 12px; font-size:12px; color:var(--ink-2)}
+.views button+button{border-left:1px solid var(--line-2)}
+.views button:hover{background:var(--sunk); color:var(--ink)}
+.right{margin-left:auto; display:flex; gap:8px}
+.btn{height:34px; padding:0 15px; border-radius:7px; border:1px solid var(--line-2); background:var(--panel); font-size:12.5px; font-weight:500}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn.filled{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.btn.filled:hover{color:var(--accent-ink); filter:brightness(1.07)}
+.btn.stop{color:#C64040}
+.motion-status{margin:10px 0 0; color:var(--ink-2); font-size:11.5px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere}
+
+main{flex:1 1 auto; display:grid; grid-template-columns:1fr 268px; min-height:0}
+.stage{position:relative; background:var(--stage); min-width:0}
+.stage canvas{display:block; width:100%; height:100%}
+.loading{
+  position:absolute; inset:0; display:grid; place-items:center; gap:8px;
+  background:var(--stage); color:var(--ink-2); font-size:12.5px;
+}
+
+aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:14px}
+.lbl{font-size:10.5px; letter-spacing:.09em; color:var(--ink-3); font-weight:500}
+.rows{display:flex; flex-direction:column; margin:7px 0 16px}
+.row{display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:6px; color:var(--ink-2)}
+.row.active{background:var(--accent-wash); color:var(--ink)}
+.row b{font-weight:500; min-width:30px; font-size:12.5px}
+.row span{margin-left:auto; font-size:13px}
+.row i{width:5px; height:5px; border-radius:50%; background:var(--line-2); flex:0 0 auto}
+.row.grip i{background:var(--grip)}
+.grip-actions{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px}
+.grip-actions .btn{padding:0 8px; color:var(--grip)}
+.result{border-top:1px solid var(--line); padding-top:14px; margin-top:2px}
+.result pre{
+  margin:8px 0 0; padding:11px 12px; border-radius:7px; background:var(--sunk);
+  font-family:"IBM Plex Mono",monospace; font-size:11px; line-height:1.65;
+  white-space:pre-wrap; color:var(--ink);
+}
+.stack{display:flex; flex-direction:column; gap:8px}
+.toast{
+  position:fixed; left:50%; bottom:24px; transform:translate(-50%,12px);
+  padding:10px 16px; border-radius:8px; font-size:12.5px;
+  background:var(--accent-wash); color:var(--accent); border:1px solid var(--accent);
+  opacity:0; pointer-events:none; transition:opacity .18s, transform .18s;
+}
+.toast.show{opacity:1; transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>인치웜 자세 편집기</h1>
+    <div class="views">
+      <button data-view="front">정면</button>
+      <button data-view="side">측면</button>
+      <button data-view="top">위</button>
+      <button data-view="iso">비스듬히</button>
+    </div>
+    <div class="right">
+      <button class="btn" id="reset" disabled title="몸통 J1~J7을 실제 0도로 이동합니다. 그리퍼는 유지합니다.">초기 자세</button>
+      <button class="btn" id="recall" disabled title="마지막으로 명령한 몸통 자세를 화면에 불러옵니다. 동작을 눌러야 실제로 이동합니다.">최근 자세 불러오기</button>
+      <button class="btn" id="confirm" disabled>확정</button>
+      <button class="btn filled" id="move" disabled>동작</button>
+      <button class="btn stop" id="stop" disabled>정지</button>
+    </div>
+  </header>
+  <main>
+    <div class="stage" id="stage">
+      <div class="loading" id="loading">모델을 읽는 중입니다</div>
+    </div>
+    <aside>
+      <span class="lbl">팔 관절</span>
+      <div class="rows" id="arm"></div>
+      <span class="lbl">그리퍼</span>
+      <div class="rows" id="grip"></div>
+      <div class="grip-actions">
+        <button class="btn" id="grip-left" disabled title="왼쪽 그리퍼를 영점 기준 +4.6도로 이동합니다.">그리퍼 잡기 L</button>
+        <button class="btn" id="grip-right" disabled title="오른쪽 그리퍼를 영점 기준 +4.6도로 이동합니다.">그리퍼 잡기 R</button>
+      </div>
+      <div class="result">
+        <span class="lbl">확정한 자세</span>
+        <div class="stack">
+          <pre id="out">확정을 누르면 여기에 관절각이 나옵니다.</pre>
+          <button class="btn" id="copy" style="width:100%" disabled>복사</button>
+        </div>
+        <p class="motion-status" id="connection" role="status">모터 연결 중…</p>
+        <p class="motion-status" id="motion" role="status">동작·초기 자세는 몸통만 이동합니다. 그리퍼는 유지합니다.</p>
+      </div>
+    </aside>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import {OrbitControls} from "three/addons/controls/OrbitControls.js";
+import {STLLoader} from "three/addons/loaders/STLLoader.js";
+
+const MODEL_URL = "../../models/xs/model.xml";
+const MODEL_DIR = "../../models/xs/";
+const ARM = ["J1","J2","J3","J4","J5","J6","J7"];
+const GRIP = ["G_L","G_R"];
+const GRIP_CLOSE_DEG = 4.6;
+const SERVER = location.port === "8080" ? "http://127.0.0.1:18765" : location.origin;
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 2) => (v < 0 ? "−" : "") + Math.abs(v).toFixed(d);
+
+/* ---------- model.xml 읽기 ---------- */
+const nums = text => text.trim().split(/\s+/).map(Number);
+const quatOf = node => {
+  const [w, x, y, z] = node.hasAttribute("quat") ? nums(node.getAttribute("quat")) : [1, 0, 0, 0];
+  return new THREE.Quaternion(x, y, z, w).normalize();
+};
+const posOf = node => new THREE.Vector3(...(node.hasAttribute("pos") ? nums(node.getAttribute("pos")) : [0, 0, 0]));
+
+function parseBody(node){
+  const joints = [...node.children].filter(c => c.tagName === "joint");
+  return {
+    name: node.getAttribute("name"),
+    pos: posOf(node),
+    quat: quatOf(node),
+    joint: joints.length ? {
+      name: joints[0].getAttribute("name"),
+      axis: new THREE.Vector3(...nums(joints[0].getAttribute("axis") ?? "0 0 1")).normalize(),
+      range: joints[0].hasAttribute("range") ? nums(joints[0].getAttribute("range")) : null,
+    } : null,
+    geoms: [...node.children].filter(c =>
+      c.tagName === "geom" && c.getAttribute("type") === "mesh"
+    ).map(g => ({
+      mesh: g.getAttribute("mesh"),
+      pos: posOf(g), quat: quatOf(g),
+      rgba: nums(g.getAttribute("rgba") ?? "0.7 0.7 0.7 1"),
+    })),
+    sites: [...node.children].filter(c => c.tagName === "site").map(s => ({
+      name: s.getAttribute("name"), pos: posOf(s),
+    })),
+    cameras: [...node.children].filter(c => c.tagName === "camera").map(c => ({
+      name: c.getAttribute("name"), pos: posOf(c), quat: quatOf(c),
+      resolution: nums(c.getAttribute("resolution") ?? "1280 800"),
+      focal: nums(c.getAttribute("focalpixel") ?? "1000 1000"),
+    })),
+    children: [...node.children].filter(c => c.tagName === "body").map(parseBody),
+  };
+}
+
+async function resolveIncludes(xml){
+  // 카메라 좌표계는 include된 파일에 있으므로 읽기 전에 본문에 펼쳐 넣는다.
+  for (const node of [...xml.querySelectorAll("include")]){
+    const text = await (await fetch(MODEL_DIR + node.getAttribute("file"))).text();
+    const included = new DOMParser().parseFromString(text, "text/xml");
+    for (const child of [...included.documentElement.children]){
+      node.parentNode.insertBefore(xml.importNode(child, true), node);
+    }
+    node.remove();
+  }
+}
+
+async function loadModel(){
+  const xml = new DOMParser().parseFromString(await (await fetch(MODEL_URL)).text(), "text/xml");
+  await resolveIncludes(xml);
+  const meshes = {};
+  for (const asset of xml.querySelectorAll("asset > mesh")){
+    meshes[asset.getAttribute("name")] = {
+      file: MODEL_DIR + asset.getAttribute("file"),
+      scale: nums(asset.getAttribute("scale") ?? "1 1 1"),
+    };
+  }
+  return {meshes, bodies: [...xml.querySelector("worldbody").children]
+    .filter(c => c.tagName === "body").map(parseBody)};
+}
+
+/* ---------- 장면 ---------- */
+const stage = $("stage");
+const scene = new THREE.Scene();
+const renderer = new THREE.WebGLRenderer({antialias: true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+stage.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 100);
+camera.up.set(0, 0, 1);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.12;
+
+const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+scene.add(new THREE.HemisphereLight(0xffffff, dark ? 0x14191f : 0xb9c2cb, dark ? 1.5 : 2.1));
+const key = new THREE.DirectionalLight(0xffffff, dark ? 1.5 : 1.8);
+key.position.set(1.2, -1.6, 1.8);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+fill.position.set(-1.4, 1.0, 0.4);
+scene.add(fill);
+
+const bodyObjects = {};  // 본체 이름 → Object3D
+const jointNodes = {};   // 관절 이름 → 회전을 적용할 Object3D
+const jointInfo = {};    // 관절 이름 → 축과 제한
+const pickable = [];     // 집을 수 있는 링크 메시
+const sites = {};
+const angles = {};       // 관절 이름 → 라디안
+const stl = new STLLoader();
+const geometryCache = new Map();
+
+async function meshGeometry(asset){
+  if (!geometryCache.has(asset.file)){
+    geometryCache.set(asset.file, stl.loadAsync(asset.file));
+  }
+  const geometry = (await geometryCache.get(asset.file)).clone();
+  geometry.scale(...asset.scale);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+const VIEW_COLORS = {depth: 0x1ab2ff, rgb: 0xff6a1a};
+const VIEW_LENGTH_M = 0.15;
+
+function viewLines(camera){
+  // 화소 초점거리와 해상도로 구한 시야 반각: $$\alpha=\arctan\!\left(\frac{w}{2f}\right)$$
+  const halfX = Math.atan(camera.resolution[0] / 2 / camera.focal[0]);
+  const halfY = Math.atan(camera.resolution[1] / 2 / camera.focal[1]);
+  const x = VIEW_LENGTH_M * Math.tan(halfX), y = VIEW_LENGTH_M * Math.tan(halfY);
+  // MuJoCo 카메라는 자기 좌표계의 음의 Z 방향을 본다.
+  const far = [[-x, -y], [x, -y], [x, y], [-x, y]]
+    .map(([a, b]) => new THREE.Vector3(a, b, -VIEW_LENGTH_M));
+  const points = [];
+  for (const corner of far) points.push(new THREE.Vector3(), corner.clone());
+  for (let i = 0; i < 4; i++) points.push(far[i].clone(), far[(i + 1) % 4].clone());
+
+  const color = camera.name.includes("depth") ? VIEW_COLORS.depth : VIEW_COLORS.rgb;
+  const lines = new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(points),
+    new THREE.LineBasicMaterial({color, transparent: true, opacity: 0.9}),
+  );
+  lines.userData.viewLines = true;
+  return lines;
+}
+
+async function buildBody(spec, parent, meshes, ownerJoint){
+  const body = new THREE.Object3D();
+  body.position.copy(spec.pos);
+  body.quaternion.copy(spec.quat);
+  parent.add(body);
+  bodyObjects[spec.name] = body;
+
+  const pivot = new THREE.Object3D();
+  body.add(pivot);
+  const joint = spec.joint?.name ?? ownerJoint;
+  if (spec.joint){
+    jointNodes[spec.joint.name] = pivot;
+    jointInfo[spec.joint.name] = spec.joint;
+    angles[spec.joint.name] = 0;
+  }
+
+  for (const geom of spec.geoms){
+    const mesh = new THREE.Mesh(await meshGeometry(meshes[geom.mesh]), new THREE.MeshStandardMaterial({
+      color: new THREE.Color(geom.rgba[0], geom.rgba[1], geom.rgba[2]),
+      roughness: 0.62, metalness: 0.15,
+    }));
+    mesh.position.copy(geom.pos);
+    mesh.quaternion.copy(geom.quat);
+    mesh.userData.joint = joint;
+    pivot.add(mesh);
+    if (joint) pickable.push(mesh);
+  }
+  for (const site of spec.sites){
+    const marker = new THREE.Object3D();
+    marker.position.copy(site.pos);
+    pivot.add(marker);
+    sites[site.name] = marker;
+  }
+  for (const camera of spec.cameras ?? []){
+    const node = new THREE.Object3D();
+    node.position.copy(camera.pos);
+    node.quaternion.copy(camera.quat);
+    node.add(viewLines(camera));
+    pivot.add(node);
+  }
+  for (const child of spec.children) await buildBody(child, pivot, meshes, joint);
+}
+
+/* ---------- 관절 적용과 순기구학 ---------- */
+function applyAngles(){
+  for (const [name, node] of Object.entries(jointNodes)){
+    node.quaternion.setFromAxisAngle(jointInfo[name].axis, angles[name]);
+  }
+  scene.updateMatrixWorld(true);
+}
+const clampJoint = (name, value) => {
+  const range = jointInfo[name].range;
+  return range ? Math.min(range[1], Math.max(range[0], value)) : value;
+};
+
+/* ---------- 끝단 끌기: 감쇠 최소자승 역기구학 ---------- */
+const tipPosition = () => sites.tip_R.getWorldPosition(new THREE.Vector3());
+
+function solve3(A, b){
+  const det =
+    A[0][0]*(A[1][1]*A[2][2]-A[1][2]*A[2][1]) -
+    A[0][1]*(A[1][0]*A[2][2]-A[1][2]*A[2][0]) +
+    A[0][2]*(A[1][0]*A[2][1]-A[1][1]*A[2][0]);
+  if (Math.abs(det) < 1e-14) return [0, 0, 0];
+  const column = (index) => {
+    const M = A.map(row => row.slice());
+    for (let r = 0; r < 3; r++) M[r][index] = b[r];
+    return (
+      M[0][0]*(M[1][1]*M[2][2]-M[1][2]*M[2][1]) -
+      M[0][1]*(M[1][0]*M[2][2]-M[1][2]*M[2][0]) +
+      M[0][2]*(M[1][0]*M[2][1]-M[1][1]*M[2][0])
+    ) / det;
+  };
+  return [column(0), column(1), column(2)];
+}
+
+function reachToward(target){
+  const step = 1e-4, damping = 0.05;
+  for (let iteration = 0; iteration < 6; iteration++){
+    applyAngles();
+    const here = tipPosition();
+    const error = target.clone().sub(here);
+    const distance = error.length();
+    if (distance < 2e-4) return;
+    if (distance > 0.03) error.multiplyScalar(0.03 / distance);
+
+    const columns = ARM.map(name => {
+      const saved = angles[name];
+      angles[name] = saved + step;
+      applyAngles();
+      const moved = tipPosition().sub(here).divideScalar(step);
+      angles[name] = saved;
+      return moved;
+    });
+    applyAngles();
+
+    // 감쇠 최소자승: $$\Delta q=J^T(JJ^T+\lambda^2 I)^{-1}e$$
+    const A = [0,1,2].map(a => [0,1,2].map(b =>
+      columns.reduce((sum, c) => sum + c.getComponent(a) * c.getComponent(b), 0) +
+      (a === b ? damping * damping : 0)));
+    const y = solve3(A, [error.x, error.y, error.z]);
+    ARM.forEach((name, index) => {
+      const delta = columns[index].x*y[0] + columns[index].y*y[1] + columns[index].z*y[2];
+      angles[name] = clampJoint(name, angles[name] + Math.max(-0.25, Math.min(0.25, delta)));
+    });
+  }
+  applyAngles();
+}
+
+/* ---------- 집기와 끌기 ---------- */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const plane = new THREE.Plane();
+let drag = null;
+
+function setPointer(event){
+  const box = renderer.domElement.getBoundingClientRect();
+  pointer.set((event.clientX - box.left) / box.width * 2 - 1, -((event.clientY - box.top) / box.height * 2 - 1));
+  raycaster.setFromCamera(pointer, camera);
+}
+const onPlane = () => {
+  const hit = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(plane, hit) ? hit : null;
+};
+
+// OrbitControls보다 먼저 판단하도록 상위 요소의 캡처 단계에서 받는다.
+stage.addEventListener("pointerdown", event => {
+  if (event.button !== 0) return;
+  setPointer(event);
+
+  const handleHit = raycaster.intersectObject(tipHandle, false)[0];
+  if (handleHit){
+    plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), handleHit.point);
+    drag = {kind: "tip"};
+  } else {
+    const hit = raycaster.intersectObjects(pickable, false)[0];
+    if (!hit) return;
+    const name = hit.object.userData.joint;
+    const node = jointNodes[name];
+    const axis = jointInfo[name].axis.clone().applyQuaternion(node.getWorldQuaternion(new THREE.Quaternion())).normalize();
+    const origin = node.getWorldPosition(new THREE.Vector3());
+    plane.setFromNormalAndCoplanarPoint(axis, hit.point);
+    const start = onPlane();
+    if (!start) return;
+    // 잡은 점이 회전축에 가까우면 지렛대가 짧아 각도가 과하게 튀므로 최소 반지름을 둔다.
+    const radial = start.clone().sub(origin).projectOnPlane(axis);
+    const radius = Math.max(radial.length(), frame.radius * 0.22);
+    if (radial.lengthSq() < 1e-10) radial.copy(new THREE.Vector3(1, 0, 0).projectOnPlane(axis));
+    if (radial.lengthSq() < 1e-10) radial.copy(new THREE.Vector3(0, 1, 0).projectOnPlane(axis));
+    drag = {
+      kind: "joint", name, axis, radius, start,
+      // 잡은 점에서 축을 중심으로 도는 접선 방향: $$\hat t=\hat n\times\hat r$$
+      tangent: axis.clone().cross(radial.normalize()).normalize(),
+      base: angles[name],
+    };
+    select(name);
+  }
+  controls.enabled = false;
+  renderer.domElement.setPointerCapture(event.pointerId);
+}, true);
+
+renderer.domElement.addEventListener("pointermove", event => {
+  if (!drag) return;
+  setPointer(event);
+  const point = onPlane();
+  if (!point) return;
+
+  if (drag.kind === "tip"){
+    reachToward(point);
+  } else {
+    // 접선 방향으로 끈 거리를 반지름으로 나눈 회전각: $$\Delta\theta=(\vec d\cdot\hat t)/r$$
+    const moved = point.clone().sub(drag.start).projectOnPlane(drag.axis);
+    angles[drag.name] = clampJoint(drag.name, drag.base + moved.dot(drag.tangent) / drag.radius);
+    applyAngles();
+  }
+  invalidateConfirmed();
+  paint();
+});
+
+const endDrag = () => { drag = null; controls.enabled = true; };
+renderer.domElement.addEventListener("pointerup", endDrag);
+renderer.domElement.addEventListener("pointercancel", endDrag);
+
+/* ---------- 패널 ---------- */
+let selected = null;
+function buildRows(){
+  const row = (name, kind) =>
+    `<div class="row ${kind}" data-name="${name}"><i></i><b class="mono">${name}</b><span class="mono">0.00°</span></div>`;
+  $("arm").innerHTML = ARM.map(n => row(n, "")).join("");
+  $("grip").innerHTML = GRIP.map(n => row(n, "grip")).join("");
+}
+function select(name){
+  selected = name;
+  document.querySelectorAll(".row").forEach(r => r.classList.toggle("active", r.dataset.name === name));
+}
+function paint(){
+  document.querySelectorAll(".row").forEach(r => {
+    r.querySelector("span").textContent = fmt(THREE.MathUtils.radToDeg(angles[r.dataset.name] ?? 0)) + "°";
+  });
+}
+
+function toast(message){
+  const box = $("toast");
+  box.textContent = message;
+  box.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => box.classList.remove("show"), 2400);
+}
+
+let confirmed = null;
+let modelReady = false, connected = false, activeMove = null, pendingRequest = null, stopping = false;
+let motionTimer = null;
+let lastMoveJoints = ARM;
+let recalling = false;
+
+function updateButtons(){
+  const busy = Boolean(pendingRequest || activeMove || stopping || recalling);
+  $("confirm").disabled = !modelReady;
+  $("copy").disabled = !confirmed;
+  $("move").disabled = !modelReady || !connected || !confirmed || busy;
+  $("reset").disabled = !modelReady || !connected || busy;
+  $("recall").disabled = !modelReady || !connected || busy;
+  $("grip-left").disabled = !modelReady || !connected || busy;
+  $("grip-right").disabled = !modelReady || !connected || busy;
+  $("stop").disabled = !connected || stopping;
+}
+
+function invalidateConfirmed(){
+  if (!confirmed) return;
+  confirmed = null;
+  $("out").textContent = "자세가 바뀌었습니다. 다시 확정해 주세요.";
+  updateButtons();
+}
+
+function finishMove(message){
+  activeMove = null;
+  clearTimeout(motionTimer);
+  $("motion").textContent = message;
+  updateButtons();
+}
+
+async function post(route, body, timeoutMs = 30000){
+  const response = await fetch(SERVER + route, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "명령을 처리하지 못했습니다.");
+  return payload;
+}
+
+async function sendPose(targets, initial = false){
+  if (!connected || pendingRequest || activeMove || stopping || recalling) return;
+  lastMoveJoints = Object.keys(targets);
+  const grippers = lastMoveJoints.filter(name => GRIP.includes(name));
+  const label = grippers.length ? `${grippers[0] === "G_L" ? "L" : "R"} 그리퍼` : "몸통 관절";
+  $("motion").textContent = `${label}에 목표 전송 중…`;
+  pendingRequest = post("/api/pose", {angles_deg: targets, remember: !initial});
+  updateButtons();
+  try {
+    const result = await pendingRequest;
+    if (result.pose_save_error) toast(result.pose_save_error);
+    if (stopping) return;
+    activeMove = result.command_ids;
+    $("motion").textContent = grippers.length ? `${label} 잡는 중… · 목표 +${GRIP_CLOSE_DEG}°` : "이동 중… · 그리퍼 유지";
+    motionTimer = setTimeout(() => finishMove("도착 확인 시간이 지났습니다. 목표와 토크는 유지됩니다."), 45000);
+    for (const joint of grippers){
+      angles[joint] = THREE.MathUtils.degToRad(targets[joint]);
+    }
+    if (grippers.length){
+      applyAngles(); paint();
+    }
+    if (initial){
+      for (const name of ARM) angles[name] = 0;
+      invalidateConfirmed();
+      applyAngles(); paint(); select(null);
+    }
+  } catch (error){
+    finishMove(error.message);
+    toast(error.message);
+  } finally {
+    pendingRequest = null;
+    updateButtons();
+  }
+}
+
+function observeMotion(payload){
+  if (!activeMove) return;
+  const states = new Map(payload.joints.map(state => [state.name, state]));
+  const selected = [];
+  for (const [name, commandId] of Object.entries(activeMove)){
+    const state = states.get(name);
+    if (!state || state.error){
+      finishMove(`${name}: ${state?.error ?? "상태를 읽지 못했습니다."}`);
+      return;
+    }
+    if (state.command_id == null || state.command_id < commandId) return;
+    if (state.command_id !== commandId || state.motion_status === "idle"){
+      finishMove("다른 명령 또는 토크 해제로 이번 이동이 중단되었습니다.");
+      return;
+    }
+    selected.push(state);
+  }
+  if (!selected.every(state => ["arrived", "timeout"].includes(state.motion_status))) return;
+  const arrived = selected.filter(state => state.motion_status === "arrived").length;
+  const outside = selected.filter(state => Math.abs(state.error_raw) > state.tolerance_raw).map(state => state.name);
+  const errors = selected.map(state => `${state.name}=${Math.abs(state.error_raw)}`).join("  ");
+  finishMove(`도착 ${arrived}/${selected.length} · 허용 초과: ${outside.join(", ") || "없음"}\n오차(raw): ${errors}`);
+}
+
+function connectMotor(){
+  const socket = new WebSocket(SERVER.replace(/^http/, "ws") + "/ws");
+  socket.onmessage = event => {
+    const payload = JSON.parse(event.data);
+    connected = true;
+    const errors = payload.joints.filter(state => state.error);
+    $("connection").textContent = errors.length ? `모터 응답 오류: ${errors.map(state => state.name).join(", ")}` : "모터 연결됨 · 몸통·그리퍼";
+    observeMotion(payload);
+    updateButtons();
+  };
+  socket.onclose = () => {
+    connected = false;
+    $("connection").textContent = "모터 연결 끊김 · 서버 연결을 다시 시도합니다.";
+    updateButtons();
+    setTimeout(connectMotor, 1500);
+  };
+}
+
+$("reset").addEventListener("click", () => sendPose(Object.fromEntries(ARM.map(name => [name, 0])), true));
+$("recall").addEventListener("click", async () => {
+  if ($("recall").disabled) return;
+  recalling = true;
+  updateButtons();
+  try {
+    const response = await fetch(SERVER + "/api/pose/last", {cache: "no-store", signal: AbortSignal.timeout(10000)});
+    const payload = await response.json();
+    if (response.status === 404) throw new Error("최근 자세 기능을 사용하려면 GUI 서버를 재시작해 주세요.");
+    if (!response.ok) throw new Error(payload.detail || "최근 자세를 읽지 못했습니다.");
+    const targets = payload.pose?.angles_deg;
+    if (!targets) throw new Error("아직 저장된 자세가 없습니다. 확정 후 동작하면 자동 저장됩니다.");
+    if (!ARM.every(name => typeof targets[name] === "number" && Number.isFinite(targets[name]))) {
+      throw new Error("저장된 자세의 관절각을 확인해 주세요.");
+    }
+    for (const name of ARM) angles[name] = THREE.MathUtils.degToRad(targets[name]);
+    confirmed = Object.fromEntries(ARM.map(name => [name, targets[name]]));
+    applyAngles(); paint(); select(null);
+    $("out").textContent = JSON.stringify(confirmed, null, 1).replace(/\n /g, "\n  ");
+    $("motion").textContent = "최근 목표 자세를 불러왔습니다. 동작을 누르면 이동합니다. 그리퍼는 유지합니다.";
+    toast("최근 자세를 불러왔습니다.");
+  } catch (error){
+    toast(error.message);
+  } finally {
+    recalling = false;
+    updateButtons();
+  }
+});
+$("move").addEventListener("click", () => {
+  if (confirmed) sendPose(Object.fromEntries(ARM.map(name => [name, confirmed[name]])));
+});
+$("grip-left").addEventListener("click", () => sendPose({G_L: GRIP_CLOSE_DEG}));
+$("grip-right").addEventListener("click", () => sendPose({G_R: GRIP_CLOSE_DEG}));
+$("stop").addEventListener("click", async () => {
+  if (stopping) return;
+  stopping = true;
+  updateButtons();
+  // 이미 보낸 이동 요청 다음에 정지 요청이 전달되도록 순서를 유지한다.
+  if (pendingRequest) await pendingRequest.catch(() => {});
+  const joints = [...new Set([...ARM, ...lastMoveJoints])];
+  const results = await Promise.allSettled(joints.map(joint => post("/api/stop", {joint})));
+  const failed = joints.filter((name, index) => results[index].status === "rejected");
+  stopping = false;
+  finishMove(failed.length ? `정지 확인 실패: ${failed.join(", ")}` : "정지 명령 전송 · 토크 유지");
+});
+
+$("confirm").addEventListener("click", () => {
+  confirmed = Object.fromEntries(ARM.map(name =>
+    [name, Number(THREE.MathUtils.radToDeg(angles[name]).toFixed(2))]));
+  $("out").textContent = JSON.stringify(confirmed, null, 1).replace(/\n /g, "\n  ");
+  updateButtons();
+  toast("확정했습니다. 동작을 누르면 이 자세로 이동합니다.");
+});
+
+$("copy").addEventListener("click", async () => {
+  if (!confirmed){ toast("먼저 확정을 눌러 주세요."); return; }
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(confirmed));
+    toast("복사했습니다.");
+  } catch {
+    toast("브라우저가 복사를 막았습니다. 위 상자에서 직접 선택해 주세요.");
+  }
+});
+
+/* ---------- 시점 ---------- */
+let frame = {center: new THREE.Vector3(), radius: 1};
+function setView(kind){
+  const {center, radius} = frame;
+  const distance = radius * 2.6;
+  const offset = {
+    front: [0, -distance, 0], side: [distance, 0, 0],
+    top: [0, 0, distance], iso: [distance * 0.62, -distance * 0.68, distance * 0.45],
+  }[kind];
+  camera.position.copy(center).add(new THREE.Vector3(...offset));
+  controls.target.copy(center);
+  controls.update();
+}
+document.querySelectorAll("[data-view]").forEach(b =>
+  b.addEventListener("click", () => setView(b.dataset.view)));
+
+/* ---------- 시작 ---------- */
+const tipHandle = new THREE.Mesh(
+  new THREE.SphereGeometry(0.016, 24, 16),
+  new THREE.MeshStandardMaterial({color: 0xff6a2b, roughness: 0.35, emissive: 0x3a1200}),
+);
+const tipFixed = new THREE.Mesh(
+  new THREE.SphereGeometry(0.011, 20, 14),
+  new THREE.MeshStandardMaterial({color: 0x2aa6c9, roughness: 0.4}),
+);
+
+function resize(){
+  const box = stage.getBoundingClientRect();
+  renderer.setSize(box.width, box.height, false);
+  camera.aspect = box.width / box.height;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize);
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  if (sites.tip_R) tipHandle.position.copy(tipPosition());
+  if (sites.tip_L) tipFixed.position.copy(sites.tip_L.getWorldPosition(new THREE.Vector3()));
+  renderer.render(scene, camera);
+}
+
+(async () => {
+  try {
+    const {meshes, bodies} = await loadModel();
+    for (const body of bodies) await buildBody(body, scene, meshes, null);
+    applyAngles();
+
+    // 빔은 로봇보다 훨씬 길고 시야 선은 로봇 밖으로 뻗으므로 시점 기준에서 제외한다.
+    const box = new THREE.Box3();
+    bodyObjects.gripper_L.traverse(object => { if (object.isMesh) box.expandByObject(object); });
+    frame.center = box.getCenter(new THREE.Vector3());
+    frame.radius = box.getBoundingSphere(new THREE.Sphere()).radius;
+    scene.add(tipHandle, tipFixed);
+
+    buildRows();
+    paint();
+    resize();
+    setView("iso");
+    $("loading").remove();
+    modelReady = true;
+    updateButtons();
+    animate();
+  } catch (error){
+    $("loading").textContent = `모델을 읽지 못했습니다: ${error.message}`;
+  }
+})();
+connectMotor();
+</script>
+</body>
+</html>

@@ -31,6 +31,20 @@ class FakeMotorChain(FakeSerial):
 
     def write(self, packet: list[int]) -> int:
         """해당 ID의 장치에 패킷을 전달하고 중점 설정은 위치 명령 없이 반영한다."""
+        if packet[2] == 254 and packet[4] == 0x83:
+            self.packets.append(bytes(packet))
+            if sum(packet[2:]) & 0xFF != 0xFF:
+                raise AssertionError("동기 쓰기 체크섬이 올바르지 않습니다.")
+            if self.failure == "disconnect":
+                raise OSError("시험용 연결 끊김")
+            address, size = packet[5:7]
+            for offset in range(7, len(packet) - 1, size + 1):
+                registers = self.devices.get(packet[offset])
+                if registers is not None:
+                    registers[address:address + size] = bytes(packet[offset + 1:offset + 1 + size])
+                    if registers[40] == 1:
+                        registers[56:58] = registers[42:44]
+            return len(packet)
         servo_id = packet[2]
         if servo_id not in self.devices:
             self.packets.append(bytes(packet))

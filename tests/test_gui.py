@@ -27,6 +27,10 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         log_patch = patch("hardware.motor_logging.DEFAULT_LOG_DIR", Path(directory.name) / "logs")
         log_patch.start()
         self.addCleanup(log_patch.stop)
+        self.pose_path = Path(directory.name) / "last_pose.json"
+        pose_patch = patch("gui.server.LAST_POSE_PATH", self.pose_path)
+        pose_patch.start()
+        self.addCleanup(pose_patch.stop)
         self.names = ("G_L", "J1", "J2", "J3", "J4", "J5", "J6", "J7", "G_R")
         self.controller = Mock(spec=JointController)
         self.controller.joint_names = self.names
@@ -37,7 +41,7 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.console = Console(self.controller, self.calibration)
         self.addAsyncCleanup(self.console.close)
 
-    async def _post(self, path: str, body: dict) -> tuple[int, dict]:
+    async def _post(self, path: str, body: dict, *, method: str = "POST") -> tuple[int, dict]:
         """네트워크와 실물 포트를 열지 않고 실제 HTTP 경로를 실행한다."""
         app = create_app("FAKE", None)
         app.state.console = self.console
@@ -53,7 +57,7 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
 
         scope = {
             "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
-            "method": "POST", "scheme": "http", "path": path, "raw_path": path.encode(),
+            "method": method, "scheme": "http", "path": path, "raw_path": path.encode(),
             "query_string": b"", "headers": [(b"content-type", b"application/json")],
             "server": ("test", 80), "client": ("test", 1), "root_path": "",
         }
@@ -61,6 +65,60 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         status = next(message["status"] for message in messages if message["type"] == "http.response.start")
         payload = b"".join(message.get("body", b"") for message in messages)
         return status, json.loads(payload)
+
+    async def test_recent_pose_survives_reset_gripper_and_console_restart(self) -> None:
+        """실제 측정값 대신 입력한 목표를 보존하며 초기화와 그리퍼 명령으로 덮어쓰지 않는다."""
+        targets = {name: 7.13 for name in self.names if name.startswith("J")}
+        self.controller.move_many.side_effect = lambda angles: dict.fromkeys(angles, 7.119)
+        self.controller.command_id.return_value = 1
+        status, _ = await self._post("/api/pose", {"angles_deg": targets})
+        self.assertEqual(status, 200)
+        status, _ = await self._post("/api/pose", {
+            "angles_deg": dict.fromkeys(targets, 0.0), "remember": False,
+        })
+        self.assertEqual(status, 200)
+        status, _ = await self._post("/api/pose", {"angles_deg": {"G_L": 4.6}})
+        self.assertEqual(status, 200)
+        restarted = Console(self.controller, self.calibration)
+        self.addAsyncCleanup(restarted.close)
+        self.assertEqual(await restarted.last_pose(), {"angles_deg": targets})
+        calls_before = self.controller.move_many.call_count
+        status, payload = await self._post("/api/pose/last", {}, method="GET")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["pose"]["angles_deg"], targets)
+        self.assertEqual(self.controller.move_many.call_count, calls_before)
+
+    async def test_failed_motion_preserves_previous_pose_and_save_failure_reports_acceptance(self) -> None:
+        """거부된 목표를 저장하지 않고 파일 저장 실패와 이미 전송된 이동을 구분한다."""
+        original = {"angles_deg": {name: 2.0 for name in self.names if name.startswith("J")}}
+        self.pose_path.write_text(json.dumps(original))
+        targets = dict.fromkeys(original["angles_deg"], 5.0)
+        self.controller.move_many.side_effect = ValueError("관절 범위 초과")
+        status, _ = await self._post("/api/pose", {"angles_deg": targets})
+        self.assertEqual(status, 400)
+        self.assertEqual(json.loads(self.pose_path.read_text()), original)
+        self.controller.move_many.side_effect = None
+        self.controller.move_many.return_value = targets
+        self.controller.command_id.return_value = 1
+        with patch("pathlib.Path.replace", side_effect=OSError("쓰기 실패")):
+            status, payload = await self._post("/api/pose", {"angles_deg": targets})
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], "accepted")
+        self.assertIn("쓰기 실패", payload["pose_save_error"])
+        self.assertEqual(json.loads(self.pose_path.read_text()), original)
+
+    async def test_recent_pose_missing_or_invalid_file(self) -> None:
+        """기록이 없거나 손상된 경우 임의의 자세를 만들지 않고 원인을 알린다."""
+        status, payload = await self._post("/api/pose/last", {}, method="GET")
+        self.assertEqual(status, 200)
+        self.assertIsNone(payload["pose"])
+        self.pose_path.write_text('{"angles_deg": {"J1": 5}}')
+        status, _ = await self._post("/api/pose/last", {}, method="GET")
+        self.assertEqual(status, 400)
+        self.pose_path.write_text("broken")
+        status, _ = await self._post("/api/pose/last", {}, method="GET")
+        self.assertEqual(status, 400)
+        self.controller.move_many.assert_not_called()
 
     async def test_zero_endpoints_use_calibration_and_refresh_controller(self) -> None:
         """두 영점 경로가 설정 모듈에 위임하고 제어기의 기준을 갱신한다."""
@@ -81,6 +139,37 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 400)
         self.assertIn("미완료", payload["detail"])
         self.controller.reload_calibration.assert_called_once_with()
+
+    async def test_pose_endpoint_uses_shared_bus_and_returns_matching_state_ids(self) -> None:
+        """묶음 API가 실제 SDK 동기 패킷과 상태·raw 오차로 이어지는지 확인한다."""
+        serial = FakeMotorChain()
+        original_console = self.console
+        with patch("scservo_sdk.port_handler.serial.Serial", return_value=serial):
+            with STS3215Bus("FAKE") as bus:
+                controller = JointController(bus)
+                self.console = Console(controller, MotorCalibration(bus))
+                try:
+                    angles = {f"J{index}": 5.0 for index in range(1, 8)}
+                    status, payload = await self._post("/api/pose", {"angles_deg": angles})
+                    self.assertEqual(status, 200)
+                    self.assertEqual(payload["status"], "accepted")
+                    self.assertEqual(set(payload["targets_deg"]), set(angles))
+                    states = await self.console.snapshot()
+                    for state in states:
+                        if state["name"] in angles:
+                            self.assertEqual(state["command_id"], payload["command_ids"][state["name"]])
+                            self.assertEqual(state["motion_status"], "arrived")
+                            self.assertEqual(state["error_raw"], 0)
+                    self.assertEqual(sum(packet[4] == 0x83 for packet in serial.packets), 1)
+                    self.assertEqual(serial.devices[0][40], 0)
+                    self.assertEqual(serial.devices[8][40], 0)
+                    count = len(serial.packets)
+                    status, _ = await self._post("/api/pose", {"angles_deg": {"J1": True}})
+                    self.assertEqual(status, 422)
+                    self.assertEqual(len(serial.packets), count)
+                finally:
+                    await self.console.close()
+                    self.console = original_console
 
     async def test_real_controller_arrival_reaches_gui_for_absolute_and_relative_moves(self) -> None:
         """단일·전체 이동이 실제 제어기와 SDK를 거쳐 도착 판정과 로그에 반영된다."""
@@ -143,6 +232,7 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
             await request
         try:
             for path, body in (("/api/move", {"joint": "J1", "angle_deg": 5}),
+                               ("/api/pose", {"angles_deg": {"J1": 5}}),
                                ("/api/move-zero", {}),
                                ("/api/torque", {"enabled": True}),
                                ("/api/calibrate-zero", {})):

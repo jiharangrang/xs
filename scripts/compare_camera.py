@@ -76,7 +76,7 @@ def save_png(path: Path, image: np.ndarray) -> None:
 def main(argv: list[str] | None = None) -> int:
     """한 번 촬영하고 같은 관절각의 시뮬레이션과 원본·비교 영상을 저장한다."""
     parser = argparse.ArgumentParser(description="정지 자세의 실제 카메라와 CAD 비교")
-    parser.add_argument("--server", default="ws://127.0.0.1:8000/ws", help="기존 캘리브레이션 서버")
+    parser.add_argument("--server", default="ws://127.0.0.1:18765/ws", help="기존 캘리브레이션 서버")
     parser.add_argument("--serial", help="카메라 일련번호")
     parser.add_argument("--sim-only", action="store_true", help="실제 카메라 없이 시뮬레이션만 저장")
     parser.add_argument("--replay", type=Path, help="저장된 비교 폴더의 영상·관절각으로 다시 렌더링")

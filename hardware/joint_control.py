@@ -2,6 +2,7 @@
 저장된 영점·회전 방향·감속비로 변환과 제어를 수행하며 캘리브레이션 설정은 변경하지 않는다.
 """
 
+from contextlib import ExitStack
 from dataclasses import asdict, dataclass, replace
 import math
 from pathlib import Path
@@ -149,6 +150,9 @@ class JointState:
     tolerance_deg: float | None = None
     motion_status: str = "idle"
     torque_enabled: bool | None = None
+    command_id: int | None = None
+    error_raw: int | None = None
+    tolerance_raw: float | None = None
 
 
 @dataclass
@@ -281,10 +285,11 @@ class JointController:
     def _with_motion(self, state: JointState) -> JointState:
         r"""이동 중에만 목표 오차를 확인하고 완료 또는 미도달 결과를 반환한다.
 
-        $$e_\theta=\theta_t-\theta$$
+        $$e_\theta=\theta_t-\theta,\quad e_r=\operatorname{round}(dc e_\theta)$$
 
         판정이 끝나면 외력에 의한 변위를 감시하지 않으며 추가 명령도 보내지 않는다.
         """
+        state = replace(state, command_id=self.command_id(state.name))
         target = self._targets.get(state.name)
         if target is None:
             return state
@@ -295,8 +300,19 @@ class JointController:
                 target.status = "arrived"
             elif time.monotonic() >= target.deadline:
                 target.status = "timeout"
+        calibration = self._calibration(state.name)
+        # 판정 시점의 오차를 모터 카운트로 환산: $$e_r=\operatorname{round}(dc e_\theta)$$
+        error_raw = round(calibration.direction * calibration.counts_per_degree * target.error_deg)
+        # 관절별 허용 각도를 카운트로 환산: $$\epsilon_r=c\epsilon_\theta$$
+        tolerance_raw = calibration.counts_per_degree * self.tolerance_for(state.name)
         return replace(state, target_deg=target.angle_deg, error_deg=target.error_deg,
-                       tolerance_deg=self.tolerance_for(state.name), motion_status=target.status)
+                       tolerance_deg=self.tolerance_for(state.name), motion_status=target.status,
+                       error_raw=error_raw, tolerance_raw=tolerance_raw)
+
+    def command_id(self, joint: str) -> int | None:
+        """상태가 어느 명령의 결과인지 구분할 관절별 최신 명령 번호를 반환한다."""
+        self._calibration(joint)
+        return self._logger.command_id(joint)
 
     def _calibration(self, joint: str) -> JointCalibration:
         """알 수 없는 관절 이름을 통신 전에 거부한다."""
@@ -430,6 +446,48 @@ class JointController:
             travel_time_s = abs(target_deg - current.position_deg) / speed_deg_s
             self._track_target(joint, target_deg, travel_time_s)
             return target_deg
+
+    def move_many(
+        self, angles_deg: dict[str, float], *, speed_deg_s: float = 10.0,
+        acceleration_deg_s2: float = 90.0,
+    ) -> dict[str, float]:
+        r"""관절 목표 전체를 검증하고 한 패킷으로 전송하며 관절별 로그와 도착 판정을 유지한다.
+
+        $$t_i=|\theta_{t,i}-\theta_{0,i}|/v$$
+
+        입력에 없는 관절은 유지하며, 모든 관절이 도착할 때까지 기다리지 않고 반환한다.
+        """
+        self._require_reference()
+        if not isinstance(angles_deg, dict) or not angles_deg:
+            raise ValueError("관절 이름과 도 단위 목표 각도를 한 개 이상 지정해 주세요.")
+        raw_targets = {}
+        targets = {}
+        for joint, angle in angles_deg.items():
+            calibration = self._calibration(joint)
+            try:
+                position = calibration.degrees_to_raw(angle)
+                speed = calibration.speed_to_raw(speed_deg_s)
+                acceleration = calibration.acceleration_to_raw(acceleration_deg_s2)
+            except ValueError as error:
+                raise ValueError(f"{joint}: {error}") from error
+            raw_targets[calibration.servo_id] = (position, speed, acceleration)
+            targets[joint] = calibration.raw_to_degrees(position)
+        current = {joint: self.read(joint) for joint in targets}
+        with ExitStack() as commands:
+            for joint, angle in angles_deg.items():
+                position, speed, acceleration = raw_targets[self._calibration(joint).servo_id]
+                commands.enter_context(self._logger.command(
+                    joint, "move_many", angle_deg=angle, target_raw=position,
+                    speed_deg_s=speed_deg_s, acceleration_deg_s2=acceleration_deg_s2,
+                    speed_raw=speed, acceleration_raw=acceleration,
+                ))
+                self._targets.pop(joint, None)
+            self._bus.move_many(raw_targets)
+            for joint, target in targets.items():
+                # 지정 속도로 관절별 이동 예상 시간 계산: $$t_i=|\theta_{t,i}-\theta_{0,i}|/v$$
+                travel_time_s = abs(target - current[joint].position_deg) / speed_deg_s
+                self._track_target(joint, target, travel_time_s)
+        return targets
 
     def move_by(
         self, joint: str, delta_deg: float, *, speed_deg_s: float = 10.0,
