@@ -132,6 +132,59 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.calibration.calibrate_all_zero.assert_called_once_with()
         self.assertEqual(self.controller.reload_calibration.call_count, 2)
 
+    async def test_scan_keeps_polling_and_stop_available_after_disconnect(self) -> None:
+        """촬영 중 조회와 정지가 계속되며 요청 취소 후에도 중복 촬영 없이 저장한다."""
+        started, release = threading.Event(), threading.Event()
+        self.controller.log_path = Path("fake-motors.jsonl")
+
+        def capture(read_pose, log_path) -> dict:
+            """별도 카메라 스레드에서 모터 실행부를 통해 실제 자세를 조회한다."""
+            self.assertEqual(read_pose()["angles_deg"], dict.fromkeys(self.names, 12.0))
+            self.assertEqual(log_path, self.controller.log_path)
+            started.set()
+            release.wait(2)
+            read_pose()
+            return {"path": "/fake/scan", "frames": 15}
+
+        self.console.start()
+        with patch("gui.server.capture_scan", side_effect=capture):
+            request = asyncio.create_task(self.console.scan())
+            try:
+                self.assertTrue(await asyncio.to_thread(started.wait, 1))
+                reads = self.controller.read.call_count
+                async with self.console.subscribe() as updates:
+                    payload = await asyncio.wait_for(updates.get(), 1)
+                    self.assertEqual(payload["scan"]["status"], "running")
+                self.assertGreater(self.controller.read.call_count, reads)
+                status, _ = await self._post("/api/pose", {"angles_deg": {"J1": 5}})
+                self.assertEqual(status, 400)
+                status, _ = await self._post("/api/scan", {})
+                self.assertEqual(status, 400)
+                status, _ = await self._post("/api/stop", {"joint": "J1"})
+                self.assertEqual(status, 200)
+                request.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await request
+            finally:
+                release.set()
+                await asyncio.wait_for(asyncio.shield(self.console._scan_task), 1)
+        self.assertEqual(self.console.scan_status["status"], "saved")
+        self.controller.move_many.assert_not_called()
+
+    async def test_scan_permission_error_is_visible_and_retryable(self) -> None:
+        """USB 권한 실패를 GUI에 설명하고 다음 요청을 막지 않는다."""
+        from hardware.camera import CameraError
+
+        with patch("gui.server.capture_scan", side_effect=CameraError("uvc_open failed -3")):
+            status, payload = await self._post("/api/scan", {})
+        self.assertEqual(status, 400)
+        self.assertIn("sudo .venv/bin/python -m gui.server", payload["detail"])
+        self.assertEqual(self.console.scan_status["status"], "error")
+        with patch("gui.server.capture_scan", return_value={"path": "/fake/scan", "frames": 15}):
+            status, payload = await self._post("/api/scan", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["frames"], 15)
+
     async def test_partial_calibration_failure_refreshes_controller(self) -> None:
         """중점 설정 실패도 제어기에 반영하고 성공 응답을 보내지 않는다."""
         self.calibration.calibrate_all_zero.side_effect = MotorError("중점 설정 미완료")

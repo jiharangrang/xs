@@ -120,6 +120,8 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
         <button class="btn" id="grip-left" disabled title="왼쪽 그리퍼를 영점 기준 +4.6도로 이동합니다.">그리퍼 잡기 L</button>
         <button class="btn" id="grip-right" disabled title="오른쪽 그리퍼를 영점 기준 +4.6도로 이동합니다.">그리퍼 잡기 R</button>
       </div>
+      <button class="btn" id="scan" style="width:100%" disabled>스캔 · 15프레임 저장</button>
+      <p class="motion-status" id="scan-status" role="status">이동이 끝나면 스캔을 눌러 주세요. 영상·실제 관절각·모터 로그를 저장합니다.</p>
       <div class="result">
         <span class="lbl">확정한 자세</span>
         <div class="stack">
@@ -496,10 +498,11 @@ let confirmed = null;
 let modelReady = false, connected = false, activeMove = null, pendingRequest = null, stopping = false;
 let motionTimer = null;
 let lastMoveJoints = ARM;
+let scanBusy = false, scanRequest = false;
 let recalling = false;
 
 function updateButtons(){
-  const busy = Boolean(pendingRequest || activeMove || stopping || recalling);
+  const busy = Boolean(pendingRequest || activeMove || stopping || scanBusy || scanRequest || recalling);
   $("confirm").disabled = !modelReady;
   $("copy").disabled = !confirmed;
   $("move").disabled = !modelReady || !connected || !confirmed || busy;
@@ -508,6 +511,8 @@ function updateButtons(){
   $("grip-left").disabled = !modelReady || !connected || busy;
   $("grip-right").disabled = !modelReady || !connected || busy;
   $("stop").disabled = !connected || stopping;
+  $("scan").disabled = !connected || busy;
+  $("scan").textContent = scanBusy || scanRequest ? "스캔 중…" : "스캔 · 15프레임 저장";
 }
 
 function invalidateConfirmed(){
@@ -535,7 +540,7 @@ async function post(route, body, timeoutMs = 30000){
 }
 
 async function sendPose(targets, initial = false){
-  if (!connected || pendingRequest || activeMove || stopping || recalling) return;
+  if (!connected || pendingRequest || activeMove || stopping || scanBusy || scanRequest || recalling) return;
   lastMoveJoints = Object.keys(targets);
   const grippers = lastMoveJoints.filter(name => GRIP.includes(name));
   const label = grippers.length ? `${grippers[0] === "G_L" ? "L" : "R"} 그리퍼` : "몸통 관절";
@@ -601,6 +606,7 @@ function connectMotor(){
     const errors = payload.joints.filter(state => state.error);
     $("connection").textContent = errors.length ? `모터 응답 오류: ${errors.map(state => state.name).join(", ")}` : "모터 연결됨 · 몸통·그리퍼";
     observeMotion(payload);
+    if (payload.scan) showScan(payload.scan);
     updateButtons();
   };
   socket.onclose = () => {
@@ -610,6 +616,32 @@ function connectMotor(){
     setTimeout(connectMotor, 1500);
   };
 }
+
+function showScan(scan){
+  scanBusy = scan.status === "running";
+  if (scanBusy) $("scan-status").textContent = "카메라 준비 → 15프레임 촬영 → 저장 중…\n모터 로깅은 계속됩니다.";
+  if (scan.status === "saved") $("scan-status").textContent = `${scan.frames}프레임 저장 완료\n${scan.path}`;
+  if (scan.status === "error") $("scan-status").textContent = scan.error;
+}
+
+$("scan").addEventListener("click", async () => {
+  if ($("scan").disabled) return;
+  scanRequest = true;
+  showScan({status: "running"});
+  updateButtons();
+  try {
+    const result = await post("/api/scan", {}, 120000);
+    showScan({status: "saved", ...result});
+    toast("스캔을 저장했습니다.");
+  } catch (error){
+    scanBusy = false;
+    $("scan-status").textContent = error.message;
+    toast(error.message);
+  } finally {
+    scanRequest = false;
+    updateButtons();
+  }
+});
 
 $("reset").addEventListener("click", () => sendPose(Object.fromEntries(ARM.map(name => [name, 0])), true));
 $("recall").addEventListener("click", async () => {

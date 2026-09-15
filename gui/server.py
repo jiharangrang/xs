@@ -5,6 +5,8 @@
 import argparse
 import asyncio
 import json
+import math
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,6 +20,8 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from hardware.calibration import MotorCalibration
+from hardware.camera import CameraError
+from hardware.camera_scan import capture_scan
 from hardware.joint_control import JointController
 from hardware.ports import resolve_port_settings
 from hardware.sts3215 import MotorError, STS3215Bus
@@ -43,6 +47,8 @@ class Console:
         self._poll_task: asyncio.Task | None = None
         self._closing = False
         self._calibration_task: asyncio.Task | None = None
+        self._scan_task: asyncio.Task | None = None
+        self.scan_status: dict = {"status": "idle"}
 
     @property
     def joint_names(self) -> tuple[str, ...]:
@@ -56,6 +62,8 @@ class Console:
 
     async def close(self) -> None:
         """조회 작업을 종료하고 진행 중인 통신이 끝날 때까지 기다린다."""
+        if self._scan_task is not None:
+            await asyncio.gather(asyncio.shield(self._scan_task), return_exceptions=True)
         self._closing = True
         if self._poll_task is not None:
             self._poll_task.cancel()
@@ -117,7 +125,7 @@ class Console:
     async def _poll_states(self) -> None:
         """상태를 계속 읽어 로그에 남기고 연결된 화면에는 최신 값만 전달한다."""
         while True:
-            payload = {"joints": await self.snapshot(), "error": None}
+            payload = {"joints": await self.snapshot(), "error": None, "scan": self.scan_status}
             for updates in self._subscribers:
                 if updates.full():
                     updates.get_nowait()
@@ -135,14 +143,56 @@ class Console:
         if errors:
             raise MotorError("처리하지 못한 관절: " + "; ".join(errors))
 
-    def _require_idle_calibration(self) -> None:
-        """영점 변경 중 이전 좌표를 기준으로 새 명령이 대기열에 쌓이지 않게 한다."""
+    def _require_idle_setup(self) -> None:
+        """영점 설정이나 촬영 중 자세를 바꾸는 명령이 겹치지 않게 한다."""
         if self._calibration_task is not None and not self._calibration_task.done():
             raise MotorError("전체 중점·영점 설정 중입니다. 완료 후 명령해 주세요.")
+        if self._scan_task is not None and not self._scan_task.done():
+            raise MotorError("스캔 중입니다. 저장 완료 후 명령해 주세요.")
+
+    async def _scan_snapshot(self) -> dict:
+        """촬영 전후의 실제 관절각과 조회 시간을 공통 제어 경로에서 수집한다."""
+        started = time.monotonic()
+        states = await self.snapshot()
+        failed = [state["name"] for state in states if state["error"]
+                  or not math.isfinite(state["position_deg"])]
+        if failed:
+            raise CameraError("촬영 자세를 읽지 못했습니다: " + ", ".join(failed))
+        return {"angles_deg": {state["name"]: state["position_deg"] for state in states},
+                "states": states, "read_started_s": started, "received_monotonic_s": time.monotonic()}
+
+    async def scan(self) -> dict:
+        """모터 통신을 유지하면서 별도 스레드에서 촬영하고 연결이 끊겨도 저장을 마친다."""
+        self._require_idle_setup()
+        self.scan_status = {"status": "running"}
+        loop = asyncio.get_running_loop()
+
+        def read_pose() -> dict:
+            """카메라 스레드에서 기존 모터 실행부의 관절 조회 결과를 받는다."""
+            return asyncio.run_coroutine_threadsafe(self._scan_snapshot(), loop).result()
+
+        async def collect() -> dict:
+            """촬영 성공 또는 실패를 상태 스트림에도 남긴다."""
+            try:
+                result = await asyncio.to_thread(capture_scan, read_pose, self._controller.log_path)
+            except Exception as error:
+                message = str(error)
+                if "uvc_open" in message and "-3" in message:
+                    message = ("카메라 USB 접근 권한이 없습니다. 기존 서버를 종료한 뒤 터미널에서 "
+                               "sudo .venv/bin/python -m gui.server 를 실행해 주세요.")
+                self.scan_status = {"status": "error", "error": message}
+                raise CameraError(message) from error
+            self.scan_status = {"status": "saved", **result}
+            print(f"스캔 저장: {result['path']} ({result['frames']}프레임)", flush=True)
+            return result
+
+        self._scan_task = asyncio.create_task(collect())
+        self._scan_task.add_done_callback(self._finish_calibration)
+        return await asyncio.shield(self._scan_task)
 
     async def calibrate_all_zero(self) -> tuple[str, ...]:
         """브라우저 요청이 끊겨도 시작한 중점 변경과 영점 저장을 끝까지 처리한다."""
-        self._require_idle_calibration()
+        self._require_idle_setup()
         self._calibration_task = asyncio.create_task(
             self.run(lambda: self._update_calibration(self._calibration.calibrate_all_zero))
         )
@@ -163,12 +213,12 @@ class Console:
 
     async def move(self, joint: str, angle_deg: float, speed_deg_s: float) -> None:
         """절대 목표 각도를 전송한다."""
-        self._require_idle_calibration()
+        self._require_idle_setup()
         await self.run(lambda: self._controller.move_to(joint, angle_deg, speed_deg_s=speed_deg_s))
 
     async def move_all_zero(self, speed_deg_s: float) -> None:
         """모든 관절에 저장된 영점으로의 이동 명령을 차례로 전송한다."""
-        self._require_idle_calibration()
+        self._require_idle_setup()
         await self.run(lambda: self._apply_all(
             self.joint_names, lambda name: self._controller.move_to(name, 0.0, speed_deg_s=speed_deg_s),
         ))
@@ -188,7 +238,7 @@ class Console:
 
     async def move_pose(self, angles_deg: dict[str, float], remember: bool = True) -> dict:
         """기존 통신 연결에서 목표 각도를 묶어 전송하고 관절별 명령 번호를 반환한다."""
-        self._require_idle_calibration()
+        self._require_idle_setup()
 
         def send() -> dict:
             """전송과 명령 번호 수집 사이에 다른 명령이 끼어들지 않게 한다."""
@@ -211,7 +261,7 @@ class Console:
 
     async def jog(self, joint: str, delta_deg: float, speed_deg_s: float) -> None:
         """현재 각도 기준 상대 이동을 전송한다."""
-        self._require_idle_calibration()
+        self._require_idle_setup()
         await self.run(lambda: self._controller.move_by(joint, delta_deg, speed_deg_s=speed_deg_s))
 
     async def stop(self, joints: tuple[str, ...]) -> None:
@@ -221,12 +271,12 @@ class Console:
     async def set_torque(self, joints: tuple[str, ...], enabled: bool) -> None:
         """지정한 관절의 토크만 켜거나 끈다."""
         if enabled:
-            self._require_idle_calibration()
+            self._require_idle_setup()
         await self.run(lambda: self._apply_all(joints, lambda name: self._controller.set_torque(name, enabled)))
 
     async def save_zero(self, joint: str) -> None:
         """정지한 현재 자세를 관절 영점으로 저장한다."""
-        self._require_idle_calibration()
+        self._require_idle_setup()
         await self.run(lambda: self._update_calibration(lambda: self._calibration.save_zero(joint)))
 
 
@@ -349,6 +399,14 @@ def create_app(port: str | None, baudrate: int | None) -> FastAPI:
         except BUS_ERRORS as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return {"ok": True, "status": "accepted", **result}
+
+    @app.post("/api/scan")
+    async def scan() -> dict:
+        """정지 자세의 영상과 관절각·모터 로그를 한 번 저장한다."""
+        try:
+            return {"ok": True, **await console().scan()}
+        except (CameraError, *BUS_ERRORS) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
 
     @app.post("/api/jog")
     async def jog(request: JogRequest) -> dict:

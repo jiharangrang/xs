@@ -16,9 +16,7 @@ MUJOCO_LOG.TXT
 logs/motors/
 
 # 카메라 입력 시험에서 저장한 실제 영상
-outputs/camera/
-outputs/camera_comparison/
-outputs/beam/
+outputs/
 
 # macOS 자동 생성 파일
 .DS_Store
