@@ -9,6 +9,7 @@ from scservo_sdk import COMM_SUCCESS, PortHandler, sms_sts
 from scservo_sdk.sms_sts import (
     SMS_STS_MIN_ANGLE_LIMIT_L,
     SMS_STS_MODE,
+    SMS_STS_LOCK,
     SMS_STS_TORQUE_ENABLE,
 )
 
@@ -173,6 +174,42 @@ class STS3215Bus:
     def ping(self, servo_id: int) -> int:
         """모터 응답을 확인하고 장치가 보고한 모델 번호를 반환한다."""
         return self._call(servo_id, "ping")[0]
+
+    def set_position_gains(self, servo_id: int, *, p: int, i: int, d: int) -> dict:
+        """정지한 위치 모드 모터의 PID만 영구 저장하고 읽기 검증 후 설정 잠금을 복구한다."""
+        for name, value in (("P", p), ("I", i), ("D", d)):
+            _check_integer(name, value, 0, 254)
+        before = self.read_settings(servo_id)
+        feedback = self.read_feedback(servo_id)
+        if before["packet_error"] or feedback["packet_error"] or feedback["status_raw"]:
+            raise MotorError("모터 오류를 확인한 뒤 게인을 변경해 주세요.")
+        if before["mode"] != 0:
+            raise ValueError("단회전 위치 모드에서만 위치 게인을 변경합니다.")
+        if feedback["speed_raw"] != 0 or feedback["moving_raw"] != 0:
+            raise ValueError("모터가 멈춘 뒤 게인을 변경해 주세요.")
+        requested = {21: p, 22: d, 23: i}
+        original = bytes.fromhex(before["registers_0_39_hex"])
+        changed = {address: value for address, value in requested.items() if original[address] != value}
+        if not changed:
+            return {"before": before, "after": before, "changed_registers": []}
+        expected = bytearray(original)
+        for address, value in changed.items():
+            expected[address] = value
+        try:
+            self.write_register(servo_id, SMS_STS_LOCK, 0)
+            if self.read_register(servo_id, SMS_STS_LOCK) != 0:
+                raise MotorError("게인 저장을 위한 설정 잠금을 해제하지 못했습니다.")
+            for address, value in changed.items():
+                self.write_register(servo_id, address, value)
+                time.sleep(0.02)
+            after = self.read_settings(servo_id)
+            if after["packet_error"] or bytes.fromhex(after["registers_0_39_hex"]) != bytes(expected):
+                raise MotorError("게인 변경 후 설정이 예상과 다릅니다. 실제 읽은 값을 확인해 주세요.")
+        finally:
+            self.write_register(servo_id, SMS_STS_LOCK, 1)
+            if self.read_register(servo_id, SMS_STS_LOCK) != 1:
+                raise MotorError("게인 변경 후 설정 잠금을 복구하지 못했습니다.")
+        return {"before": before, "after": after, "changed_registers": list(changed)}
 
     def read_register(self, servo_id: int, address: int) -> int:
         """초기 설정에 사용하는 한 바이트 레지스터를 읽는다."""

@@ -30,7 +30,7 @@ from kinematics.joints import ARM_JOINT_NAMES
 
 INDEX_PATH = Path(__file__).resolve().parent / "static" / "index.html"
 LAST_POSE_PATH = INDEX_PATH.parents[2] / ".local" / "last_pose.json"
-POLL_INTERVAL_S = 0.2
+POLL_INTERVAL_S = 0.1
 BUS_ERRORS = (ValueError, MotorError, OSError)
 T = TypeVar("T")
 
@@ -123,14 +123,15 @@ class Console:
             self._subscribers.discard(updates)
 
     async def _poll_states(self) -> None:
-        """상태를 계속 읽어 로그에 남기고 연결된 화면에는 최신 값만 전달한다."""
+        """조회·기록 시간을 포함한 주기에 맞춰 상태를 읽고 화면에는 최신 값만 전달한다."""
         while True:
+            next_poll = time.monotonic() + POLL_INTERVAL_S
             payload = {"joints": await self.snapshot(), "error": None, "scan": self.scan_status}
             for updates in self._subscribers:
                 if updates.full():
                     updates.get_nowait()
                 updates.put_nowait(payload)
-            await asyncio.sleep(POLL_INTERVAL_S)
+            await asyncio.sleep(max(0.0, next_poll - time.monotonic()))
 
     def _apply_all(self, joints: tuple[str, ...], work: Callable[[str], object]) -> None:
         """대상 관절을 모두 처리한 뒤 실패한 관절만 모아서 알린다."""
@@ -264,6 +265,13 @@ class Console:
         self._require_idle_setup()
         await self.run(lambda: self._controller.move_by(joint, delta_deg, speed_deg_s=speed_deg_s))
 
+    async def set_position_gains(self, joint: str, *, p: int, i: int, d: int) -> dict:
+        """기존 통신 순서를 지키며 몸통 관절 하나의 게인을 변경한다."""
+        self._require_idle_setup()
+        if joint not in ARM_JOINT_NAMES:
+            raise ValueError("자세 튜닝은 몸통 J1~J7만 대상으로 합니다.")
+        return await self.run(lambda: self._controller.set_position_gains(joint, p=p, i=i, d=d))
+
     async def stop(self, joints: tuple[str, ...]) -> None:
         """지정한 관절을 현재 위치에서 멈춘다."""
         await self.run(lambda: self._apply_all(joints, self._controller.stop))
@@ -302,6 +310,14 @@ class JogRequest(BaseModel):
     delta_deg: float
     speed_deg_s: float = 10.0
 
+
+class GainRequest(BaseModel):
+    """몸통 관절 하나에 적용할 위치 PID 레지스터 값이다."""
+
+    joint: str
+    p: int = Field(strict=True, ge=0, le=254)
+    i: int = Field(strict=True, ge=0, le=254)
+    d: int = Field(strict=True, ge=0, le=254)
 
 
 class ZeroMoveRequest(BaseModel):
@@ -407,6 +423,15 @@ def create_app(port: str | None, baudrate: int | None) -> FastAPI:
             return {"ok": True, **await console().scan()}
         except (CameraError, *BUS_ERRORS) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.post("/api/gains")
+    async def set_position_gains(request: GainRequest) -> dict:
+        """몸통 관절의 위치 게인을 변경하고 모터에서 다시 읽은 결과를 반환한다."""
+        try:
+            result = await console().set_position_gains(request.joint, p=request.p, i=request.i, d=request.d)
+        except BUS_ERRORS as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return {"ok": True, "joint": request.joint, **result}
 
     @app.post("/api/jog")
     async def jog(request: JogRequest) -> dict:

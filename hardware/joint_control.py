@@ -237,6 +237,24 @@ class JointController:
             self._motor_settings[joint] = settings
             self._logger.write("settings", joint=joint, calibration=asdict(calibration), **settings)
 
+    def set_position_gains(self, joint: str, *, p: int, i: int, d: int) -> dict:
+        """관절의 위치 게인을 변경하고 변경 전후 값과 실제 재조회 설정을 로그에 남긴다."""
+        self._require_reference()
+        calibration = self._calibration(joint)
+        self._logger.write("gain_change", joint=joint, servo_id=calibration.servo_id,
+                           requested={"pid_p": p, "pid_i": i, "pid_d": d})
+        try:
+            result = self._bus.set_position_gains(calibration.servo_id, p=p, i=i, d=d)
+        except (MotorError, OSError, ValueError) as error:
+            self._logger.write("gain_change_result", joint=joint, result="failed", error=str(error))
+            raise
+        else:
+            self._logger.write("gain_change_result", joint=joint, result="applied", **result)
+            return result
+        finally:
+            self._motor_settings.pop(joint, None)
+            self._log_settings(joint)
+
     @property
     def joint_names(self) -> tuple[str, ...]:
         """설정 파일에 정의된 관절 순서를 반환한다."""

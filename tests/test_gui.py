@@ -120,6 +120,27 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 400)
         self.controller.move_many.assert_not_called()
 
+    async def test_gain_endpoint_uses_shared_controller_and_rejects_gripper(self) -> None:
+        """게인 변경은 기존 제어기에 전달하고 그리퍼·잘못된 값·촬영 중 요청은 거부한다."""
+        self.controller.set_position_gains.return_value = {"after": {"pid_p": 40, "pid_i": 0, "pid_d": 32}}
+        request = {"joint": "J2", "p": 40, "i": 0, "d": 32}
+        status, payload = await self._post("/api/gains", request)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["after"]["pid_p"], 40)
+        self.controller.set_position_gains.assert_called_once_with("J2", p=40, i=0, d=32)
+        status, _ = await self._post("/api/gains", {**request, "joint": "G_L"})
+        self.assertEqual(status, 400)
+        status, _ = await self._post("/api/gains", {**request, "p": True})
+        self.assertEqual(status, 422)
+        self.console._scan_task = asyncio.create_task(asyncio.Event().wait())
+        try:
+            status, _ = await self._post("/api/gains", request)
+            self.assertEqual(status, 400)
+        finally:
+            self.console._scan_task.cancel()
+            await asyncio.gather(self.console._scan_task, return_exceptions=True)
+        self.assertEqual(self.controller.set_position_gains.call_count, 1)
+
     async def test_zero_endpoints_use_calibration_and_refresh_controller(self) -> None:
         """두 영점 경로가 설정 모듈에 위임하고 제어기의 기준을 갱신한다."""
         status, _ = await self._post("/api/zero", {"joint": "J1"})
