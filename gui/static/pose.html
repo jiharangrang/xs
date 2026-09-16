@@ -88,6 +88,7 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
 }
 .toast.show{opacity:1; transform:translate(-50%,0)}
 </style>
+<link rel="stylesheet" href="pose_workflow.css">
 </head>
 <body>
 <div class="app">
@@ -111,7 +112,40 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
     <div class="stage" id="stage">
       <div class="loading" id="loading">모델을 읽는 중입니다</div>
     </div>
-    <aside>
+    <aside class="workflow-sidebar">
+      <section class="camera-panel" aria-label="실시간 카메라">
+        <div class="panel-heading"><h2>실시간 카메라</h2><span class="status-pill" id="camera-state" data-state="STOPPED">연결 대기</span></div>
+        <div class="camera-view">
+          <img id="camera-image" alt="실시간 RGB 카메라 영상" hidden>
+          <div class="camera-empty" id="camera-placeholder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 5l1.5-2h5L16 5h4v15H4V5z"/><circle cx="12" cy="12" r="4"/></svg>
+            <span id="camera-placeholder-text">카메라 연결을 기다립니다</span>
+          </div>
+          <span class="camera-mode-tag" id="camera-mode-tag">RGB</span>
+        </div>
+        <div class="camera-toolbar">
+          <div class="camera-tabs" aria-label="카메라 영상 선택">
+            <button type="button" data-camera-mode="color" aria-pressed="true">RGB</button>
+            <button type="button" data-camera-mode="depth" aria-pressed="false">깊이</button>
+          </div>
+          <button class="btn" type="button" id="camera-toggle">카메라 연결</button>
+        </div>
+        <p class="camera-caption" id="camera-caption">실물 카메라 · RGB와 깊이 영상</p>
+      </section>
+      <section class="workflow-panel" aria-label="단계별 진행">
+        <div class="panel-heading"><h2>단계별 진행</h2><span class="status-pill" id="workflow-state" data-state="IDLE">1단계 대기</span></div>
+        <div class="step-grid">
+          <button class="step-button available" type="button" id="stage1-start" aria-label="1단계 시작 자세로 이동" title="실제 모터를 빔 아래 시작 자세로 이동합니다." disabled><span class="step-number">1</span><span class="step-copy"><b>시작 자세</b><small id="stage1-action">실제 모터 이동</small></span></button>
+          <button class="step-button" type="button" disabled><span class="step-number">2</span><span class="step-copy"><b>정면 보정</b><small>준비 중</small></span></button>
+          <button class="step-button" type="button" disabled><span class="step-number">3</span><span class="step-copy"><b>첫 상승</b><small>준비 중</small></span></button>
+          <button class="step-button" type="button" disabled><span class="step-number">4</span><span class="step-copy"><b>외측 이동</b><small>준비 중</small></span></button>
+          <button class="step-button" type="button" disabled><span class="step-number">5</span><span class="step-copy"><b>최종 상승</b><small>준비 중</small></span></button>
+          <button class="step-button" type="button" disabled><span class="step-number">6</span><span class="step-copy"><b>삽입·확인</b><small>준비 중</small></span></button>
+        </div>
+        <p class="workflow-status" id="workflow-message" role="status">시작 자세로 이동한 뒤 실제 관절의 도착을 확인합니다.</p>
+        <button class="btn stop" type="button" id="workflow-stop" disabled>단계 중지</button>
+      </section>
+      <details class="joint-tools"><summary>관절·그리퍼 조작</summary>
       <span class="lbl">팔 관절</span>
       <div class="rows" id="arm"></div>
       <span class="lbl">그리퍼</span>
@@ -128,9 +162,10 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
           <pre id="out">확정을 누르면 여기에 관절각이 나옵니다.</pre>
           <button class="btn" id="copy" style="width:100%" disabled>복사</button>
         </div>
-        <p class="motion-status" id="connection" role="status">모터 연결 중…</p>
         <p class="motion-status" id="motion" role="status">동작·초기 자세는 몸통만 이동합니다. 그리퍼는 유지합니다.</p>
       </div>
+      </details>
+      <p class="connection-footer" id="connection" role="status">모터 연결 중…</p>
     </aside>
   </main>
 </div>
@@ -146,6 +181,7 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
 import * as THREE from "three";
 import {OrbitControls} from "three/addons/controls/OrbitControls.js";
 import {STLLoader} from "three/addons/loaders/STLLoader.js";
+import {createWorkflowPanel} from "./pose_workflow.js";
 
 const MODEL_URL = "../../models/xs/model.xml";
 const MODEL_DIR = "../../models/xs/";
@@ -500,9 +536,23 @@ let motionTimer = null;
 let lastMoveJoints = ARM;
 let scanBusy = false, scanRequest = false;
 let recalling = false;
+let workflow = null;
+let workflowTargets = null;
+
+function showWorkflowTargets(targets){
+  workflowTargets = targets;
+  invalidateConfirmed();
+  if (!modelReady) return;
+  for (const name of ARM){
+    if (Number.isFinite(targets[name])) angles[name] = THREE.MathUtils.degToRad(targets[name]);
+  }
+  applyAngles(); paint();
+}
 
 function updateButtons(){
-  const busy = Boolean(pendingRequest || activeMove || stopping || scanBusy || scanRequest || recalling);
+  const externalBusy = Boolean(pendingRequest || activeMove || stopping || scanBusy || scanRequest || recalling);
+  const busy = externalBusy || Boolean(workflow?.busy);
+  workflow?.setContext({connected: connected && modelReady, busy: externalBusy});
   $("confirm").disabled = !modelReady;
   $("copy").disabled = !confirmed;
   $("move").disabled = !modelReady || !connected || !confirmed || busy;
@@ -540,7 +590,7 @@ async function post(route, body, timeoutMs = 30000){
 }
 
 async function sendPose(targets, initial = false){
-  if (!connected || pendingRequest || activeMove || stopping || scanBusy || scanRequest || recalling) return;
+  if (!connected || pendingRequest || activeMove || stopping || scanBusy || scanRequest || recalling || workflow?.busy) return;
   lastMoveJoints = Object.keys(targets);
   const grippers = lastMoveJoints.filter(name => GRIP.includes(name));
   const label = grippers.length ? `${grippers[0] === "G_L" ? "L" : "R"} 그리퍼` : "몸통 관절";
@@ -607,6 +657,7 @@ function connectMotor(){
     $("connection").textContent = errors.length ? `모터 응답 오류: ${errors.map(state => state.name).join(", ")}` : "모터 연결됨 · 몸통·그리퍼";
     observeMotion(payload);
     if (payload.scan) showScan(payload.scan);
+    workflow?.observe(payload);
     updateButtons();
   };
   socket.onclose = () => {
@@ -682,6 +733,7 @@ $("stop").addEventListener("click", async () => {
   updateButtons();
   // 이미 보낸 이동 요청 다음에 정지 요청이 전달되도록 순서를 유지한다.
   if (pendingRequest) await pendingRequest.catch(() => {});
+  if (workflow?.busy) await workflow.stop();
   const joints = [...new Set([...ARM, ...lastMoveJoints])];
   const results = await Promise.allSettled(joints.map(joint => post("/api/stop", {joint})));
   const failed = joints.filter((name, index) => results[index].status === "rejected");
@@ -768,12 +820,17 @@ function animate(){
     setView("iso");
     $("loading").remove();
     modelReady = true;
+    if (workflowTargets) showWorkflowTargets(workflowTargets);
     updateButtons();
     animate();
   } catch (error){
     $("loading").textContent = `모델을 읽지 못했습니다: ${error.message}`;
   }
 })();
+workflow = createWorkflowPanel({
+  server: SERVER, post, onChange: updateButtons, notify: toast,
+  onTargets: showWorkflowTargets,
+});
 connectMotor();
 </script>
 </body>

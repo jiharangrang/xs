@@ -158,7 +158,7 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         started, release = threading.Event(), threading.Event()
         self.controller.log_path = Path("fake-motors.jsonl")
 
-        def capture(read_pose, log_path) -> dict:
+        def capture(read_pose, log_path, *, camera_factory=None) -> dict:
             """별도 카메라 스레드에서 모터 실행부를 통해 실제 자세를 조회한다."""
             self.assertEqual(read_pose()["angles_deg"], dict.fromkeys(self.names, 12.0))
             self.assertEqual(log_path, self.controller.log_path)

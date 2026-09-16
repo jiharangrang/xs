@@ -1,5 +1,5 @@
 """정지 자세의 RGB·깊이 묶음과 실제 관절각, 촬영 구간의 모터 로그를 저장한다.
-카메라는 스캔할 때만 열며 모터 명령이나 빔 분석은 수행하지 않는다.
+단독 카메라 또는 공유 수신기를 사용하며 모터 명령이나 빔 분석은 수행하지 않는다.
 """
 
 from datetime import datetime, timezone
@@ -19,11 +19,12 @@ DEFAULT_SCAN_DIR = Path(__file__).resolve().parents[1] / "outputs" / "camera_sca
 
 
 def capture_scan(read_pose: Callable[[], dict], motor_log_path: Path,
-                 output_root: Path = DEFAULT_SCAN_DIR) -> dict:
+                 output_root: Path = DEFAULT_SCAN_DIR, *, camera_factory=None) -> dict:
     """카메라 안정화 후 15프레임을 수집하고 자세와 로그를 같은 폴더에 저장한다."""
     started_utc = datetime.now(timezone.utc)
     log_start = motor_log_path.stat().st_size
-    with Gemini215Camera() as camera:
+    factory = Gemini215Camera if camera_factory is None else camera_factory
+    with factory() as camera:
         deadline = time.monotonic() + 20.0
         for _ in range(WARMUP_FRAMES):
             camera.read()

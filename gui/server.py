@@ -26,6 +26,8 @@ from hardware.joint_control import JointController
 from hardware.ports import resolve_port_settings
 from hardware.sts3215 import MotorError, STS3215Bus
 from kinematics.joints import ARM_JOINT_NAMES
+from gui.stage1 import Stage1Session, install_routes
+from gui.camera import CameraPreview, install_routes as install_camera_routes
 
 
 INDEX_PATH = Path(__file__).resolve().parent / "static" / "index.html"
@@ -49,6 +51,8 @@ class Console:
         self._calibration_task: asyncio.Task | None = None
         self._scan_task: asyncio.Task | None = None
         self.scan_status: dict = {"status": "idle"}
+        self.stage1 = Stage1Session(self)
+        self.camera = CameraPreview()
 
     @property
     def joint_names(self) -> tuple[str, ...]:
@@ -62,8 +66,10 @@ class Console:
 
     async def close(self) -> None:
         """조회 작업을 종료하고 진행 중인 통신이 끝날 때까지 기다린다."""
+        await self.stage1.stop()
         if self._scan_task is not None:
             await asyncio.gather(asyncio.shield(self._scan_task), return_exceptions=True)
+        await asyncio.to_thread(self.camera.stop)
         self._closing = True
         if self._poll_task is not None:
             self._poll_task.cancel()
@@ -94,6 +100,9 @@ class Console:
             "command_id": state.command_id,
             "error_raw": state.error_raw,
             "tolerance_raw": state.tolerance_raw,
+            "arrived_now": bool(state.target_deg is not None
+                                and self._controller.has_arrived(state, state.target_deg)),
+            "sampled_at_s": time.monotonic(),
             "error": None,
         }
 
@@ -126,7 +135,10 @@ class Console:
         """조회·기록 시간을 포함한 주기에 맞춰 상태를 읽고 화면에는 최신 값만 전달한다."""
         while True:
             next_poll = time.monotonic() + POLL_INTERVAL_S
-            payload = {"joints": await self.snapshot(), "error": None, "scan": self.scan_status}
+            states = await self.snapshot()
+            await self.stage1.observe(states)
+            payload = {"joints": states, "error": None, "scan": self.scan_status,
+                       "stage1": self.stage1.status()}
             for updates in self._subscribers:
                 if updates.full():
                     updates.get_nowait()
@@ -175,7 +187,8 @@ class Console:
         async def collect() -> dict:
             """촬영 성공 또는 실패를 상태 스트림에도 남긴다."""
             try:
-                result = await asyncio.to_thread(capture_scan, read_pose, self._controller.log_path)
+                result = await asyncio.to_thread(capture_scan, read_pose, self._controller.log_path,
+                                                 camera_factory=self.camera.stream.reader)
             except Exception as error:
                 message = str(error)
                 if "uvc_open" in message and "-3" in message:
@@ -370,6 +383,9 @@ def create_app(port: str | None, baudrate: int | None) -> FastAPI:
     def console() -> Console:
         """이 서버가 공유하는 관절 콘솔을 반환한다."""
         return app.state.console
+
+    install_routes(app, console)
+    install_camera_routes(app, console)
 
     def targets(joint: str | None) -> tuple[str, ...]:
         """요청이 가리키는 관절을 정하며 생략하면 전체를 대상으로 한다."""
