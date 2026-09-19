@@ -2,7 +2,7 @@ model: xs
 joint_order: [G_L, J1, J2, J3, J4, J5, J6, J7, G_R]
 joints:
   G_L: {servo_id: 0, direction: -1, gear_ratio: 1.0, home_raw: 2048, home_single: 4050,
-    lower_rad: -1.5708, upper_rad: 0.17453292519943295, max_speed_rad_s: 0.55, leader_id: null,
+    lower_rad: -2.129301687433082, upper_rad: 0.08726646259971647, max_speed_rad_s: 0.55, leader_id: null,
     leader_direction: 1}
   J1: {servo_id: 1, direction: 1, gear_ratio: 1.0, home_raw: 2048, home_single: 3172,
     lower_rad: -2.96, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 7, leader_direction: -1}
@@ -19,5 +19,5 @@ joints:
   J7: {servo_id: 7, direction: -1, gear_ratio: 1.0, home_raw: 2048, home_single: 122,
     lower_rad: -2.96, upper_rad: 2.96, max_speed_rad_s: 0.55, leader_id: 1, leader_direction: 1}
   G_R: {servo_id: 8, direction: -1, gear_ratio: 1.0, home_raw: 2048, home_single: 1030,
-    lower_rad: -1.5708, upper_rad: 0.17453292519943295, max_speed_rad_s: 0.55, leader_id: null,
+    lower_rad: -2.129301687433082, upper_rad: 0.08726646259971647, max_speed_rad_s: 0.55, leader_id: null,
     leader_direction: 1}
