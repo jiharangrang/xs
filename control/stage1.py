@@ -85,9 +85,7 @@ class Stage1Tracker:
             if target is None or not math.isclose(target, self.targets_deg[name], rel_tol=0., abs_tol=1e-9):
                 self.cancel(f"{name}: 유지 목표가 1단계 목표와 달라졌습니다.")
                 return None
-            if state.get("motion_status") == "timeout":
-                self.fail(f"{name}: 공통 관절 제어기의 도착 제한 시간이 지났습니다.")
-                return None
+            # 개별 예상시간 초과는 다른 관절의 이동을 끊지 않으며 전체 대기시간과 현재 도착으로 판정한다.
             if state.get("arrived_now") is True and state.get("torque") is True:
                 arrived.append(state)
         if now - self.started_at_s >= self.timeout_s:

@@ -62,15 +62,25 @@ class Stage1TrackerTests(unittest.TestCase):
                 self.assertIsNone(tracker.update(states))
                 self.assertEqual(tracker.state, "STOPPED")
 
-    def test_missing_error_and_joint_timeout_fail_without_arrival(self) -> None:
-        """누락·통신 오류·개별 도착 시간 초과를 정상 완료와 구분한다."""
-        for states in (self.states[:-1], [{**state, "error": "통신 오류"} for state in self.states],
-                       [{**state, "motion_status": "timeout"} for state in self.states]):
+    def test_missing_feedback_and_errors_fail_without_arrival(self) -> None:
+        """누락·통신 오류를 정상 완료와 구분한다."""
+        for states in (self.states[:-1], [{**state, "error": "통신 오류"} for state in self.states]):
             with self.subTest(states=states):
                 tracker = Stage1Tracker(clock=lambda: 10.)
                 tracker.begin(self.ids, self.targets)
                 self.assertIsNone(tracker.update(states))
                 self.assertEqual(tracker.state, "FAILED")
+
+    def test_joint_timeout_keeps_waiting_for_current_arrival(self) -> None:
+        """개별 예상시간이 지나도 전체 기한 안에서는 최신 도착을 기다린다."""
+        self.states[1].update(motion_status="timeout", arrived_now=False)
+        self.states[3].update(motion_status="moving", arrived_now=False)
+        self.assertIsNone(self.tracker.update(self.states))
+        self.assertEqual(self.tracker.state, "MOVING")
+        self.states[1]["arrived_now"] = True
+        self.states[3]["arrived_now"] = True
+        self.assertIsNotNone(self.tracker.update(self.states))
+        self.assertEqual(self.tracker.state, "ARRIVED")
 
     def test_wait_timeout_and_duplicate_start(self) -> None:
         """중복 시작은 거부하고 전체 대기 시간이 지나면 도착 신호 없이 종료한다."""

@@ -105,6 +105,44 @@ class Stage1ConsoleTests(unittest.IsolatedAsyncioTestCase):
         await self.session.observe(await self.console.snapshot())
         self.assertEqual(self.session.status()["state"], "ARRIVED")
 
+    async def test_joint_timeout_preserves_moving_targets_until_current_arrival(self) -> None:
+        """J2의 미세 오차와 시간 초과가 이동 중인 J4 목표를 정지 명령으로 바꾸지 않는다."""
+        await self.session.start()
+        command_ids = dict(self.session.tracker.command_ids)
+        goals = {index: bytes(self.chain.devices[index][42:44]) for index in range(1, 8)}
+        self.chain.devices[2][56:58] = (int.from_bytes(goals[2], "little") - 4).to_bytes(2, "little")
+        self.chain.devices[4][56:58] = (int.from_bytes(goals[4], "little") + 300).to_bytes(2, "little")
+        self.chain.devices[4][58:60] = (100).to_bytes(2, "little")
+        self.controller._targets["J2"].deadline = 0.
+        states = await self.console.snapshot()
+        self.assertEqual(next(state for state in states if state["name"] == "J2")["motion_status"], "timeout")
+        self.assertFalse(next(state for state in states if state["name"] == "J2")["arrived_now"])
+        self.assertEqual(next(state for state in states if state["name"] == "J4")["motion_status"], "moving")
+        await self.session.observe(states)
+        self.assertEqual(self.session.status()["state"], "MOVING")
+        self.assertIsNone(self.session.status()["arrival"])
+        self.assertEqual({name: self.controller.command_id(name) for name in ARM_JOINT_NAMES}, command_ids)
+        self.assertEqual({index: bytes(self.chain.devices[index][42:44]) for index in range(1, 8)}, goals)
+        for index in range(1, 8):
+            self.chain.devices[index][56:58] = goals[index]
+            self.chain.devices[index][58:60] = bytes(2)
+        states = await self.console.snapshot()
+        self.assertEqual(next(state for state in states if state["name"] == "J2")["motion_status"], "timeout")
+        await self.session.observe(states)
+        self.assertEqual(self.session.status()["state"], "ARRIVED")
+
+    async def test_stage_timeout_still_stops_owned_targets(self) -> None:
+        """개별 예상시간과 별개인 단계 전체 기한이 지나면 몸통 명령을 정지한다."""
+        await self.session.start()
+        command_ids = dict(self.session.tracker.command_ids)
+        grippers = {index: bytes(self.chain.devices[index]) for index in (0, 8)}
+        self.session.tracker._clock = lambda: self.session.tracker.started_at_s + self.session.tracker.timeout_s
+        await self.session.observe(await self.console.snapshot())
+        self.assertEqual(self.session.status()["state"], "FAILED")
+        self.assertIsNone(self.session.status()["arrival"])
+        self.assertTrue(all(self.controller.command_id(name) != command_ids[name] for name in ARM_JOINT_NAMES))
+        self.assertEqual(grippers, {index: bytes(self.chain.devices[index]) for index in (0, 8)})
+
     async def test_manual_replacement_is_preserved_while_remaining_stage_targets_stop(self) -> None:
         """다른 조작으로 바뀐 관절 명령을 덮어쓰지 않고 나머지 단계 명령만 정지한다."""
         await self.session.start()
