@@ -88,7 +88,7 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
 }
 .toast.show{opacity:1; transform:translate(-50%,0)}
 </style>
-<link rel="stylesheet" href="pose_workflow.css">
+<link rel="stylesheet" href="pose_workflow.css?v=20260919-camera-sticky">
 </head>
 <body>
 <div class="app">
@@ -106,6 +106,7 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
       <button class="btn" id="confirm" disabled>확정</button>
       <button class="btn filled" id="move" disabled>동작</button>
       <button class="btn stop" id="stop" disabled>정지</button>
+      <button class="btn stop" id="release-body" disabled title="J1~J7 몸통 관절의 토크만 해제합니다. 두 그리퍼의 토크는 유지합니다.">전체 토크 해제 (J1–J7)</button>
     </div>
   </header>
   <main>
@@ -141,6 +142,10 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
           <button class="step-button available" type="button" id="stage4-start" aria-label="4단계 외측 이동 시작" title="높이를 유지하며 고정턱 안쪽 면을 빔 밖으로 10 mm 빼냅니다." disabled><span class="step-number">4</span><span class="step-copy"><b>외측 이동</b><small id="stage4-action">옆 여유 10 mm까지</small></span></button>
           <button class="step-button available" type="button" id="stage5-start" aria-label="5단계 최종 상승 시작" title="저장한 실측 빔 거리까지 높이와 정면을 함께 맞춥니다." disabled><span class="step-number">5</span><span class="step-copy"><b>최종 상승</b><small id="stage5-action">삽입 높이 맞추기</small></span></button>
           <button class="step-button available" type="button" id="stage6-start" aria-label="6단계 횡방향 삽입 시작" title="높이·정면을 유지하며 4단계에서 빠지기 전의 횡위치로 돌아갑니다." disabled><span class="step-number">6</span><span class="step-copy"><b>삽입·확인</b><small id="stage6-action">4단계 출발 횡위치로</small></span></button>
+          <button class="step-button available" type="button" id="stage7-start" aria-label="7단계 뒷그리퍼 개방 후 당김·횡복귀 시작" title="앞 그리퍼가 고정된 상태에서 시작하세요. 뒷그리퍼를 -120°로 열고 J7 -3°·J1 +3°로 옆으로 뺀 뒤 연속으로 당기고, 옆 빼기 전의 횡위치로 다시 넣습니다. 열린 상태로 끝납니다." disabled><span class="step-number">7</span><span class="step-copy"><b>뒷그리퍼 당김</b><small id="stage7-action">개방·외측·당김·복귀</small></span></button>
+          <button class="step-button available" type="button" id="stage8-start" aria-label="8단계 앞그리퍼 전진 시작" title="뒷그리퍼를 잠그고 수동 지지 전환·내력 해소를 마친 뒤 시작하세요. 앞발 열기 → 옆 빼기 없이 높이·정면 보정하며 직진 → 앞발 잠금까지 실행합니다." disabled><span class="step-number">8</span><span class="step-copy"><b>앞그리퍼 전진</b><small id="stage8-action">수동 지지 전환 후 시작</small></span></button>
+          <label class="rear-distance">당김 거리 (mm)<input id="stage7-distance" type="number" min="1" max="100" step="1" value="100" aria-label="뒷그리퍼 당김 거리 mm"><small>앞 그리퍼 고정 후 실행 · 자동 잠금 없음</small></label>
+          <label class="rear-distance">전진 거리 (mm)<input id="stage8-distance" type="number" min="1" max="100" step="1" value="100" aria-label="앞그리퍼 전진 거리 mm"><small>뒷발 지지·내력 해소는 수동 · 완료 후 멈춤</small></label>
         </div>
         <p class="workflow-status" id="workflow-message" role="status">시작 자세로 이동한 뒤 실제 관절의 도착을 확인합니다.</p>
         <button class="btn stop" type="button" id="workflow-stop" disabled>단계 중지</button>
@@ -151,6 +156,8 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
       <span class="lbl">그리퍼</span>
       <div class="rows" id="grip"></div>
       <div class="grip-actions">
+        <button class="btn" id="grip-open-left" disabled title="왼쪽 그리퍼만 영점 기준 -120도로 엽니다.">그리퍼 열기 L · −120°</button>
+        <button class="btn" id="grip-open-right" disabled title="오른쪽 그리퍼만 영점 기준 -120도로 엽니다.">그리퍼 열기 R · −120°</button>
         <button class="btn" id="grip-left" disabled title="왼쪽 그리퍼를 영점 기준 +4.6도로 이동합니다.">그리퍼 잡기 L</button>
         <button class="btn" id="grip-right" disabled title="오른쪽 그리퍼를 영점 기준 +4.6도로 이동합니다.">그리퍼 잡기 R</button>
       </div>
@@ -181,13 +188,14 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
 import * as THREE from "three";
 import {OrbitControls} from "three/addons/controls/OrbitControls.js";
 import {STLLoader} from "three/addons/loaders/STLLoader.js";
-import {createWorkflowPanel} from "./pose_workflow.js";
+import {createWorkflowPanel} from "./pose_workflow.js?v=20260919-stage6-arrival";
 
 const MODEL_URL = "../../models/xs/model.xml";
 const MODEL_DIR = "../../models/xs/";
 const ARM = ["J1","J2","J3","J4","J5","J6","J7"];
 const GRIP = ["G_L","G_R"];
 const GRIP_CLOSE_DEG = 4.6;
+const GRIP_OPEN_DEG = -120;
 const SERVER = location.port === "8080" ? "http://127.0.0.1:18765" : location.origin;
 const $ = id => document.getElementById(id);
 const fmt = (v, d = 2) => (v < 0 ? "−" : "") + Math.abs(v).toFixed(d);
@@ -259,6 +267,9 @@ async function loadModel(){
 /* ---------- 장면 ---------- */
 const stage = $("stage");
 const scene = new THREE.Scene();
+const robotPlacement = new THREE.Group();
+scene.add(robotPlacement);
+let workflowAnchor = null;
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 stage.appendChild(renderer.domElement);
@@ -366,10 +377,19 @@ async function buildBody(spec, parent, meshes, ownerJoint){
 
 /* ---------- 관절 적용과 순기구학 ---------- */
 function applyAngles(){
+  robotPlacement.position.set(0, 0, 0);
+  robotPlacement.quaternion.identity();
+  robotPlacement.scale.set(1, 1, 1);
   for (const [name, node] of Object.entries(jointNodes)){
     node.quaternion.setFromAxisAngle(jointInfo[name].axis, angles[name]);
   }
   scene.updateMatrixWorld(true);
+  if (workflowAnchor && sites.tip_R){
+    // 앞 팁의 고정 자세로 모델 전체를 배치: $$T_{WM}=T_{WR}(T_{MR})^{-1}$$
+    const placement = workflowAnchor.clone().multiply(sites.tip_R.matrixWorld.clone().invert());
+    placement.decompose(robotPlacement.position, robotPlacement.quaternion, robotPlacement.scale);
+    scene.updateMatrixWorld(true);
+  }
 }
 const clampJoint = (name, value) => {
   const range = jointInfo[name].range;
@@ -377,7 +397,8 @@ const clampJoint = (name, value) => {
 };
 
 /* ---------- 끝단 끌기: 감쇠 최소자승 역기구학 ---------- */
-const tipPosition = () => sites.tip_R.getWorldPosition(new THREE.Vector3());
+const movingTip = () => workflowAnchor ? "tip_L" : "tip_R";
+const tipPosition = () => sites[movingTip()].getWorldPosition(new THREE.Vector3());
 
 function solve3(A, b){
   const det =
@@ -531,19 +552,21 @@ function toast(message){
 }
 
 let confirmed = null;
-let modelReady = false, connected = false, activeMove = null, pendingRequest = null, stopping = false;
+let modelReady = false, connected = false, activeMove = null, pendingRequest = null, stopping = false, releasingBody = false;
 let motionTimer = null;
 let lastMoveJoints = ARM;
 let scanBusy = false, scanRequest = false;
 let recalling = false;
 let workflow = null;
-let workflowTargets = null;
+let workflowTargets = null, workflowFixedPose = null;
 
-function showWorkflowTargets(targets){
+function showWorkflowTargets(targets, fixedPose = null){
   workflowTargets = targets;
+  workflowFixedPose = fixedPose;
+  workflowAnchor = fixedPose ? new THREE.Matrix4().set(...fixedPose.flat()) : null;
   invalidateConfirmed();
   if (!modelReady) return;
-  for (const name of ARM){
+  for (const name of Object.keys(jointNodes)){
     if (Number.isFinite(targets[name])) angles[name] = THREE.MathUtils.degToRad(targets[name]);
   }
   applyAngles(); paint();
@@ -560,7 +583,11 @@ function updateButtons(){
   $("recall").disabled = !modelReady || !connected || busy;
   $("grip-left").disabled = !modelReady || !connected || busy;
   $("grip-right").disabled = !modelReady || !connected || busy;
+  $("grip-open-left").disabled = !modelReady || !connected || busy;
+  $("grip-open-right").disabled = !modelReady || !connected || busy;
   $("stop").disabled = !connected || stopping;
+  $("release-body").disabled = !connected || stopping;
+  $("release-body").textContent = releasingBody ? "몸통 토크 해제 중…" : "전체 토크 해제 (J1–J7)";
   $("scan").disabled = !connected || busy;
   $("scan").textContent = scanBusy || scanRequest ? "스캔 중…" : "스캔 · 15프레임 저장";
 }
@@ -602,7 +629,7 @@ async function sendPose(targets, initial = false){
     if (result.pose_save_error) toast(result.pose_save_error);
     if (stopping) return;
     activeMove = result.command_ids;
-    $("motion").textContent = grippers.length ? `${label} 잡는 중… · 목표 +${GRIP_CLOSE_DEG}°` : "이동 중… · 그리퍼 유지";
+    $("motion").textContent = grippers.length ? `${label} ${targets[grippers[0]] < 0 ? "여는" : "잡는"} 중… · 목표 ${fmt(targets[grippers[0]], 1)}°` : "이동 중… · 그리퍼 유지";
     motionTimer = setTimeout(() => finishMove("도착 확인 시간이 지났습니다. 목표와 토크는 유지됩니다."), 45000);
     for (const joint of grippers){
       angles[joint] = THREE.MathUtils.degToRad(targets[joint]);
@@ -727,6 +754,32 @@ $("move").addEventListener("click", () => {
 });
 $("grip-left").addEventListener("click", () => sendPose({G_L: GRIP_CLOSE_DEG}));
 $("grip-right").addEventListener("click", () => sendPose({G_R: GRIP_CLOSE_DEG}));
+$("grip-open-left").addEventListener("click", () => sendPose({G_L: GRIP_OPEN_DEG}));
+$("grip-open-right").addEventListener("click", () => sendPose({G_R: GRIP_OPEN_DEG}));
+$("release-body").addEventListener("click", async () => {
+  if ($("release-body").disabled) return;
+  releasingBody = true;
+  stopping = true;
+  updateButtons();
+  try {
+    // 앞서 보낸 이동과 단계 정지를 마친 다음 토크를 해제해 재활성화를 막는다.
+    if (pendingRequest) await pendingRequest.catch(() => {});
+    if (workflow?.busy) await workflow.stop();
+    // 전체 대상인 joint:null을 사용하지 않고 몸통 관절만 명시한다.
+    const results = await Promise.allSettled(ARM.map(joint => post("/api/torque", {joint, enabled:false})));
+    const failed = ARM.filter((name, index) => results[index].status === "rejected");
+    const message = failed.length ? `몸통 토크 해제 확인 실패: ${failed.join(", ")}` : "J1–J7 토크 해제 완료 · 그리퍼 토크 유지";
+    finishMove(message);
+    toast(message);
+  } catch (error){
+    $("motion").textContent = error.message;
+    toast(error.message);
+  } finally {
+    releasingBody = false;
+    stopping = false;
+    updateButtons();
+  }
+});
 $("stop").addEventListener("click", async () => {
   if (stopping) return;
   stopping = true;
@@ -797,14 +850,14 @@ function animate(){
   requestAnimationFrame(animate);
   controls.update();
   if (sites.tip_R) tipHandle.position.copy(tipPosition());
-  if (sites.tip_L) tipFixed.position.copy(sites.tip_L.getWorldPosition(new THREE.Vector3()));
+  if (sites.tip_L) tipFixed.position.copy(sites[workflowAnchor ? "tip_R" : "tip_L"].getWorldPosition(new THREE.Vector3()));
   renderer.render(scene, camera);
 }
 
 (async () => {
   try {
     const {meshes, bodies} = await loadModel();
-    for (const body of bodies) await buildBody(body, scene, meshes, null);
+    for (const body of bodies) await buildBody(body, body.name === "gripper_L" ? robotPlacement : scene, meshes, null);
     applyAngles();
 
     // 빔은 로봇보다 훨씬 길고 시야 선은 로봇 밖으로 뻗으므로 시점 기준에서 제외한다.
@@ -820,7 +873,7 @@ function animate(){
     setView("iso");
     $("loading").remove();
     modelReady = true;
-    if (workflowTargets) showWorkflowTargets(workflowTargets);
+    if (workflowTargets) showWorkflowTargets(workflowTargets, workflowFixedPose);
     updateButtons();
     animate();
   } catch (error){

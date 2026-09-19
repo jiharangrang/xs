@@ -2,18 +2,19 @@
 export function createWorkflowPanel({server, post, onChange, onTargets, notify}){
   const $ = id => document.getElementById(id);
   const terminal = new Set(["ARRIVED", "ALIGNED", "REACHED", "FAILED", "STOPPED"]);
-  let stageState = null, alignmentState = null, liftState = null, exitState = null, heightState = null, insertionState = null, selectedStage = 1;
+  let stageState = null, alignmentState = null, liftState = null, exitState = null, heightState = null, insertionState = null, rearState = null, frontState = null, selectedStage = 1;
   let connected = false, externalBusy = true, pending = null;
   let mode = "color", cameraActive = false, cameraPending = false, cameraTimer = null;
-  let disposed = false, polling = false, frameURL = null, observedRun = null, observedStep = null, observedLift = null, observedExit = null, observedHeight = null, observedInsertion = null;
+  let disposed = false, polling = false, frameURL = null, observedRun = null, observedStep = null, observedLift = null, observedExit = null, observedHeight = null, observedInsertion = null, observedRear = null, observedFront = null;
 
-  function stageBusy(){ return pending !== null || stageState?.state === "MOVING" || alignmentState?.active === true || liftState?.active === true || exitState?.active === true || heightState?.active === true || insertionState?.active === true; }
-  function shownState(){ return selectedStage === 6 ? insertionState : selectedStage === 5 ? heightState : selectedStage === 4 ? exitState : selectedStage === 3 ? liftState : selectedStage === 2 ? alignmentState : stageState; }
+  function stageBusy(){ return pending !== null || stageState?.state === "MOVING" || alignmentState?.active === true || liftState?.active === true || exitState?.active === true || heightState?.active === true || insertionState?.active === true || rearState?.active === true || frontState?.active === true; }
+  function shownState(){ return selectedStage === 8 ? frontState : selectedStage === 7 ? rearState : selectedStage === 6 ? insertionState : selectedStage === 5 ? heightState : selectedStage === 4 ? exitState : selectedStage === 3 ? liftState : selectedStage === 2 ? alignmentState : stageState; }
 
   function renderStage(){
     const shown = shownState();
     const state = shown?.state ?? "IDLE";
-    const labels = {IDLE:`${selectedStage}단계 대기`, MOVING:`${selectedStage}단계 이동 중`, OBSERVING:"빔 관측 중", ARRIVED:"1단계 완료", ALIGNED:"정면 보정 완료", REACHED:selectedStage === 6 ? "삽입 위치 확인" : selectedStage === 5 ? "목표 높이 도착" : selectedStage === 4 ? "외측 이동 완료" : "첫 상승 완료", FAILED:"실행 실패", STOPPED:"중지됨"};
+    const rearDone = rearState?.side_return_completed ? "복귀 완료 · 열린 상태" : "당김 완료 · 열린 상태";
+    const labels = {IDLE:`${selectedStage}단계 대기`, MOVING:`${selectedStage}단계 이동 중`, OBSERVING:"빔 관측 중", ARRIVED:"1단계 완료", ALIGNED:"정면 보정 완료", REACHED:selectedStage === 8 ? "앞발 잠금각 도착" : selectedStage === 7 ? rearDone : selectedStage === 6 ? "삽입 위치 확인" : selectedStage === 5 ? "목표 높이 도착" : selectedStage === 4 ? "외측 이동 완료" : "첫 상승 완료", FAILED:"실행 실패", STOPPED:"중지됨"};
     $("workflow-state").textContent = labels[state] ?? "상태 확인 중";
     $("workflow-state").dataset.state = state;
     $("stage1-start").disabled = !connected || externalBusy || stageBusy() || stageState === null;
@@ -34,6 +35,17 @@ export function createWorkflowPanel({server, post, onChange, onTargets, notify})
     $("stage6-start").disabled = !connected || externalBusy || stageBusy() || insertionState === null;
     $("stage6-start").dataset.complete = String(insertionState?.state === "REACHED");
     $("stage6-action").textContent = insertionState?.active ? "관측·삽입 중…" : insertionState?.state === "REACHED" ? "삽입 위치 확인" : "4단계 출발 횡위치로";
+    const rearReady = typeof rearState?.side_return_completed === "boolean";
+    $("stage7-start").disabled = !connected || externalBusy || stageBusy() || !rearReady;
+    $("stage7-start").dataset.complete = String(rearState?.state === "REACHED" && rearState.side_return_completed);
+    const rearPhase = {opening:"개방 중…", side_exit:"옆으로 빼는 중…", pulling:"연속 당김 중…", pull_arrival:"당김 도착 확인 중…", return_planning:"횡복귀 계산 중…", side_return:"빔 쪽으로 넣는 중…", side_return_arrival:"복귀 도착 확인 중…", holding:"현재 자세 유지 중…"};
+    $("stage7-action").textContent = rearState && !rearReady ? "서버 재시작 필요" : rearState?.active ? rearPhase[rearState.phase] ?? "경로 계산 중…" : rearState?.state === "REACHED" ? rearDone : "개방·외측·당김·복귀";
+    $("stage7-distance").disabled = stageBusy();
+    $("stage8-start").disabled = !connected || externalBusy || stageBusy() || frontState === null;
+    $("stage8-start").dataset.complete = String(frontState?.state === "REACHED");
+    const frontPhase = {planning:"경로 확인 중…", holding:"현재 자세 유지 중…", opening:"앞발 개방 중…", advancing:"직진·높이 보정 중…", closing:"앞발 잠금 중…"};
+    $("stage8-action").textContent = frontState?.active ? frontPhase[frontState.phase] ?? "관측 중…" : frontState?.state === "REACHED" ? "직진·잠금각 도착" : "수동 지지 전환 후 시작";
+    $("stage8-distance").disabled = stageBusy();
     $("workflow-stop").disabled = !connected || pending === "stop" || !stageBusy();
     $("workflow-stop").textContent = pending === "stop" ? "중지 중…" : "단계 중지";
   }
@@ -84,8 +96,21 @@ export function createWorkflowPanel({server, post, onChange, onTargets, notify})
       }
       if (selectedStage === 6 && Number.isFinite(status.remaining_mm)){
         message += ` · 복귀 잔여 ${status.remaining_mm.toFixed(1)} mm · 높이 오차 ${status.height_error_mm.toFixed(2)} mm`;
+        if (Number.isFinite(status.height_tolerance_mm)) message += ` / 완료 ±${status.height_tolerance_mm.toFixed(1)} mm`;
         message += ` · 정면 오차 ${status.tilt_deg.toFixed(2)}° · ${status.step}회 보정`;
         if (status.observation?.single_edge) message += " · 한쪽 모서리 추적";
+      }
+      if (selectedStage === 7){
+        if (Number.isFinite(status.side_exit_deg)) message += ` · 옆 빼기 ${status.side_exit_deg}° ${status.side_exit_completed ? "완료" : "예정"}`;
+        message += ` · 경로 진행 ${Number(status.planned_progress_mm ?? 0).toFixed(1)} / ${status.distance_mm} mm`;
+        if (Number.isFinite(status.side_return_distance_mm)) message += ` · 횡복귀 ${Number(status.planned_return_mm ?? 0).toFixed(1)} / ${status.side_return_distance_mm.toFixed(1)} mm`;
+        message += " · 이동량은 관절 기준 추정";
+      }
+      if (selectedStage === 8){
+        message += ` · 전진 ${Number(status.progress_mm ?? 0).toFixed(1)} / ${status.distance_mm} mm (관절 기준)`;
+        if (Number.isFinite(status.height_error_mm)) message += ` · 높이 오차 ${status.height_error_mm.toFixed(1)} mm`;
+        if (Number.isFinite(status.height_tolerance_mm)) message += ` / 완료 ±${status.height_tolerance_mm.toFixed(1)} mm`;
+        if (Number.isFinite(status.lateral_error_mm)) message += ` · 직진 횡오차 ${status.lateral_error_mm.toFixed(1)} mm (관절 기준)`;
       }
       if (status.stop_error) message += ` 정지 확인 실패: ${status.stop_error}`;
       $("workflow-message").textContent = message;
@@ -190,6 +215,57 @@ export function createWorkflowPanel({server, post, onChange, onTargets, notify})
     finally { if (pending === "start6") pending = null; renderStage(); onChange(); }
   });
 
+  function acceptRear(status){
+    if (!status) return;
+    if (status.run_id === rearState?.run_id && terminal.has(rearState?.state) && ["OBSERVING", "MOVING"].includes(status.state)) return;
+    const newRun = status.run_id && status.run_id !== rearState?.run_id;
+    rearState = status;
+    if (status.active || newRun) selectedStage = 7;
+    const step = `${status.run_id}:${status.step}:${status.path}`;
+    if (status.step > 0 && step !== observedRear && Object.keys(status.targets_deg ?? {}).length){
+      observedRear = step;
+      onTargets(status.targets_deg, status.fixed_pose);
+    }
+  }
+
+  function acceptFront(status){
+    if (!status) return;
+    if (status.run_id === frontState?.run_id && terminal.has(frontState?.state) && ["OBSERVING", "MOVING"].includes(status.state)) return;
+    const newRun = status.run_id && status.run_id !== frontState?.run_id;
+    frontState = status;
+    if (status.active || newRun) selectedStage = 8;
+    const step = `${status.run_id}:${status.step}`;
+    if (status.step > 0 && step !== observedFront && Object.keys(status.targets_deg ?? {}).length){
+      observedFront = step;
+      onTargets(status.targets_deg);
+    }
+  }
+
+  $("stage8-start").addEventListener("click", async () => {
+    if ($("stage8-start").disabled || !$("stage8-distance").reportValidity()) return;
+    pending = "start8"; selectedStage = 8;
+    renderStage(); onChange();
+    try {
+      acceptFront(await post("/api/stage8/start", {distance_mm:Number($("stage8-distance").value)}));
+      renderWorkflow();
+    }
+    catch (error){ $("workflow-message").textContent = error.message; notify(error.message); }
+    finally { if (pending === "start8") pending = null; renderStage(); onChange(); }
+  });
+
+  $("stage7-start").addEventListener("click", async () => {
+    if ($("stage7-start").disabled) return;
+    if (!$("stage7-distance").reportValidity()) return;
+    pending = "start7"; selectedStage = 7;
+    renderStage(); onChange();
+    try {
+      acceptRear(await post("/api/stage7/start", {distance_mm:Number($("stage7-distance").value)}));
+      renderWorkflow();
+    }
+    catch (error){ $("workflow-message").textContent = error.message; notify(error.message); }
+    finally { if (pending === "start7") pending = null; renderStage(); onChange(); }
+  });
+
   $("stage2-start").addEventListener("click", async () => {
     if ($("stage2-start").disabled) return;
     pending = "start2"; selectedStage = 2;
@@ -201,12 +277,12 @@ export function createWorkflowPanel({server, post, onChange, onTargets, notify})
 
   async function stopStage(){
     if (!stageBusy()) return;
-    const stage = pending === "start6" || insertionState?.active ? 6 : pending === "start5" || heightState?.active ? 5 : pending === "start4" || exitState?.active ? 4 : pending === "start3" || liftState?.active ? 3 : pending === "start2" || alignmentState?.active ? 2 : 1;
+    const stage = pending === "start8" || frontState?.active ? 8 : pending === "start7" || rearState?.active ? 7 : pending === "start6" || insertionState?.active ? 6 : pending === "start5" || heightState?.active ? 5 : pending === "start4" || exitState?.active ? 4 : pending === "start3" || liftState?.active ? 3 : pending === "start2" || alignmentState?.active ? 2 : 1;
     pending = "stop";
     renderStage(); onChange();
     try {
       const status = await post(`/api/stage${stage}/stop`, {});
-      if (stage === 6) acceptInsertion(status); else if (stage === 5) acceptHeight(status); else if (stage === 4) acceptExit(status); else if (stage === 3) acceptLift(status); else if (stage === 2) acceptAlignment(status); else acceptStage(status);
+      if (stage === 8) acceptFront(status); else if (stage === 7) acceptRear(status); else if (stage === 6) acceptInsertion(status); else if (stage === 5) acceptHeight(status); else if (stage === 4) acceptExit(status); else if (stage === 3) acceptLift(status); else if (stage === 2) acceptAlignment(status); else acceptStage(status);
       renderWorkflow();
     }
     catch (error){ $("workflow-message").textContent = error.message; notify(error.message); }
@@ -341,6 +417,14 @@ export function createWorkflowPanel({server, post, onChange, onTargets, notify})
     .then(response => { if (!response.ok) throw new Error("6단계 기능을 사용하려면 서버를 재시작해 주세요."); return response.json(); })
     .then(status => { acceptInsertion(status); renderWorkflow(); }).catch(error => { $("workflow-message").textContent = error.message; });
 
+  fetch(server + "/api/stage7", {cache:"no-store", signal:AbortSignal.timeout(4000)})
+    .then(response => { if (!response.ok) throw new Error("7단계 기능을 사용하려면 서버를 재시작해 주세요."); return response.json(); })
+    .then(status => { acceptRear(status); renderWorkflow(); }).catch(error => { $("workflow-message").textContent = error.message; });
+
+  fetch(server + "/api/stage8", {cache:"no-store", signal:AbortSignal.timeout(4000)})
+    .then(response => { if (!response.ok) throw new Error("8단계 기능을 사용하려면 서버를 재시작해 주세요."); return response.json(); })
+    .then(status => { acceptFront(status); renderWorkflow(); }).catch(error => { $("workflow-message").textContent = error.message; });
+
   addEventListener("pagehide", () => {
     disposed = true;
     clearTimeout(cameraTimer);
@@ -358,6 +442,8 @@ export function createWorkflowPanel({server, post, onChange, onTargets, notify})
       if (payload.stage4) acceptExit(payload.stage4);
       if (payload.stage5) acceptHeight(payload.stage5);
       if (payload.stage6) acceptInsertion(payload.stage6);
+      if (payload.stage7) acceptRear(payload.stage7);
+      if (payload.stage8) acceptFront(payload.stage8);
       renderWorkflow();
       if (selectedStage === 1 && stageState?.state === "MOVING"){
         const arrived = payload.joints.filter(state => state.arrived_now && state.command_id === stageState.command_ids[state.name]).length;
