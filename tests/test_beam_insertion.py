@@ -143,6 +143,9 @@ class BeamInsertionTests(unittest.TestCase):
                 self.planner.plan(self.q, GRIPPERS, observed)
         with self.assertRaises(ValueError):
             InsertionSettings(tolerance_m=0.)
+        for tolerance in (0., -.001, float("nan"), float("inf")):
+            with self.subTest(tolerance=tolerance), self.assertRaises(ValueError):
+                InsertionSettings(arrival_height_tolerance_m=tolerance)
 
 
 if __name__ == "__main__":

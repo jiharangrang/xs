@@ -93,9 +93,9 @@ class ObservedBeamSession(ObservedLiftSession):
         if self._holding_goal:
             return True
         targets = {s["name"]: s["position_deg"] for s in self._body(states)}
-        receipt = await self.console.move_pose(targets, remember=False, owner=self, guard=self._guard,
+        receipt = await self.console.move_pose(targets, remember=False, owner=self, guard=self._command_guard,
                                                 speed_deg_s=1., acceleration_deg_s2=10.)
-        self._owned_ids = dict(receipt["command_ids"])
+        self._owned_ids.update(receipt["command_ids"])
         self._expected_ids.update(self._owned_ids)
         self._holding_goal = True
         self._next_observation_s = time.monotonic() + self.observation_interval_s

@@ -14,15 +14,16 @@ from planning.vertical_motion import solve_camera_tip_target
 
 @dataclass(frozen=True)
 class InsertionSettings:
-    """출발 횡위치의 허용오차와 한 번에 접근할 거리를 지정한다."""
+    """출발 횡위치와 완료 높이의 허용오차 및 한 번에 접근할 거리를 지정한다."""
 
     tolerance_m: float = .001
     max_step_m: float = .003
     fine_step_m: float = .001
     fine_zone_m: float = .004
+    arrival_height_tolerance_m: float = .002
 
     def __post_init__(self):
-        """횡방향 보정 거리가 유한한 양수인지 확인한다."""
+        """삽입 거리와 완료 허용오차가 유한한 양수인지 확인한다."""
         if any(not np.isfinite(value) or value <= 0 for value in vars(self).values()):
             raise ValueError("삽입 거리 설정은 유한한 양수여야 합니다.")
         if self.fine_step_m > self.max_step_m or self.fine_zone_m < self.fine_step_m:

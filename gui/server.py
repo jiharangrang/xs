@@ -25,7 +25,8 @@ from hardware.camera_scan import capture_scan
 from hardware.joint_control import JointController
 from hardware.ports import resolve_port_settings
 from hardware.sts3215 import MotorError, STS3215Bus
-from kinematics.joints import ARM_JOINT_NAMES
+from kinematics.joints import ARM_JOINT_NAMES, GRIPPER_JOINT_NAMES
+from gui.joint_command import GRIPPER_SPEED_DEG_S
 from gui.stage1 import Stage1Session, install_routes
 from gui.camera import CameraPreview, install_routes as install_camera_routes
 from gui.stage2 import Stage2Session, install_routes as install_stage2_routes
@@ -33,6 +34,8 @@ from gui.stage3 import Stage3Session, install_routes as install_stage3_routes
 from gui.stage4 import Stage4Session, install_routes as install_stage4_routes
 from gui.stage5 import Stage5Session, install_routes as install_stage5_routes
 from gui.stage6 import Stage6Session, install_routes as install_stage6_routes
+from gui.stage7 import Stage7Session, install_routes as install_stage7_routes
+from gui.stage8 import Stage8Session, install_routes as install_stage8_routes
 
 
 INDEX_PATH = Path(__file__).resolve().parent / "static" / "index.html"
@@ -63,6 +66,8 @@ class Console:
         self.stage4 = Stage4Session(self)
         self.stage5 = Stage5Session(self)
         self.stage6 = Stage6Session(self)
+        self.stage7 = Stage7Session(self)
+        self.stage8 = Stage8Session(self)
 
     @property
     def joint_names(self) -> tuple[str, ...]:
@@ -76,6 +81,8 @@ class Console:
 
     async def close(self) -> None:
         """조회 작업을 종료하고 진행 중인 통신이 끝날 때까지 기다린다."""
+        await self.stage8.stop()
+        await self.stage7.stop()
         await self.stage6.stop()
         await self.stage5.stop()
         await self.stage4.stop()
@@ -155,7 +162,7 @@ class Console:
             payload = {"joints": states, "error": None, "scan": self.scan_status,
                        "stage1": self.stage1.status(), "stage2": self.stage2.status(),
                        "stage3": self.stage3.status(), "stage4": self.stage4.status(), "stage5": self.stage5.status(),
-                       "stage6": self.stage6.status()}
+                       "stage6": self.stage6.status(), "stage7": self.stage7.status(), "stage8": self.stage8.status()}
             for updates in self._subscribers:
                 if updates.full():
                     updates.get_nowait()
@@ -179,7 +186,7 @@ class Console:
             raise MotorError("전체 중점·영점 설정 중입니다. 완료 후 명령해 주세요.")
         if self._scan_task is not None and not self._scan_task.done():
             raise MotorError("스캔 중입니다. 저장 완료 후 명령해 주세요.")
-        for stage in (self.stage2, self.stage3, self.stage4, self.stage5, self.stage6):
+        for stage in (self.stage2, self.stage3, self.stage4, self.stage5, self.stage6, self.stage7, self.stage8):
             if stage.active and owner is not stage:
                 raise MotorError(f"{stage.label} 중입니다. 단계 중지 후 다른 명령을 실행해 주세요.")
 
@@ -283,6 +290,8 @@ class Console:
             motion_options = {}
             if speed_deg_s is not None:
                 motion_options["speed_deg_s"] = speed_deg_s
+            elif angles_deg and set(angles_deg).issubset(GRIPPER_JOINT_NAMES):
+                motion_options["speed_deg_s"] = GRIPPER_SPEED_DEG_S
             if acceleration_deg_s2 is not None:
                 motion_options["acceleration_deg_s2"] = acceleration_deg_s2
             targets_deg = self._controller.move_many(angles_deg, **motion_options)
@@ -321,6 +330,8 @@ class Console:
         self.stage4.request_stop()
         self.stage5.request_stop()
         self.stage6.request_stop()
+        self.stage7.request_stop()
+        self.stage8.request_stop()
         await self.run(lambda: self._apply_all(joints, self._controller.stop))
 
     async def set_torque(self, joints: tuple[str, ...], enabled: bool) -> None:
@@ -333,6 +344,8 @@ class Console:
             self.stage4.request_stop()
             self.stage5.request_stop()
             self.stage6.request_stop()
+            self.stage7.request_stop()
+            self.stage8.request_stop()
         await self.run(lambda: self._apply_all(joints, lambda name: self._controller.set_torque(name, enabled)))
 
     async def save_zero(self, joint: str) -> None:
@@ -431,6 +444,8 @@ def create_app(port: str | None, baudrate: int | None) -> FastAPI:
     install_stage4_routes(app, console)
     install_stage5_routes(app, console)
     install_stage6_routes(app, console)
+    install_stage7_routes(app, console)
+    install_stage8_routes(app, console)
 
     def targets(joint: str | None) -> tuple[str, ...]:
         """요청이 가리키는 관절을 정하며 생략하면 전체를 대상으로 한다."""

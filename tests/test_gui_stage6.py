@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import replace
 from threading import Event
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -66,6 +67,8 @@ class Stage6ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["state"], "REACHED", status)
         self.assertLessEqual(abs(status["remaining_mm"]), 1.)
         self.assertLessEqual(abs(status["height_error_mm"]), .5)
+        self.assertEqual(status["height_tolerance_mm"], 2.)
+        self.assertEqual(status["lateral_tolerance_mm"], 1.)
         self.assertLessEqual(status["tilt_deg"], 1.)
         self.assertGreater(status["overlap_mm"], 10.)
         self.assertAlmostEqual(status["commanded_insert_mm"], 24., delta=2.)
@@ -78,6 +81,58 @@ class Stage6ConsoleTests(unittest.IsolatedAsyncioTestCase):
         code, current = await self._request("/api/stage6", "GET")
         self.assertEqual(code, 200)
         self.assertEqual(current["arrival"], status["arrival"])
+
+    async def test_small_depth_change_after_hold_finishes_without_more_corrections(self):
+        """실물 로그의 도착 후 높이 변화에도 추가 보정 없이 새 관측 두 번으로 완료한다."""
+        self.set_return_goal(confirmed_height_observation(), distance=.000626)
+        before = self._q().copy()
+        count = self._move_count()
+        heights = iter((-.000148, .00086, .00084))
+        original = self._observe
+
+        def depth_changes(*args, **kwargs):
+            r"""자세 유지 전후의 실측 높이 잔차를 새 카메라 평면에 적용한다.
+
+            $$d'=d_{goal}+e_h,\quad p'_e=p_e-(d'-d)n$$
+            """
+            observed = original(*args, **kwargs)
+            _, goal = self.session6.planner.height.height_error(self._q(), observed.normal, observed.plane_offset_m)
+            # 최근 실물 로그의 높이 잔차를 카메라 깊이에 반영: $$d'=d_{goal}+e_h$$
+            depth = goal + next(heights, .00084)
+            # 모서리 위치를 같은 평면 위에 유지: $$p'_e=p_e-(d'-d)n$$
+            point = observed.edge_point_m - (depth - observed.plane_offset_m) * observed.normal
+            return replace(observed, plane_offset_m=depth, edge_point_m=point)
+
+        self.session6.observer = depth_changes
+        await self.session6.start()
+        status = await self.finish()
+        self.assertEqual(status["state"], "REACHED", status)
+        self.assertEqual(self.calls, 3)
+        self.assertEqual(self._move_count() - count, 1)
+        self.assertEqual(status["motion_kind"], "hold")
+        self.assertEqual(status["commanded_insert_mm"], 0.)
+        self.assertEqual(status["commanded_lift_mm"], 0.)
+        self.assertAlmostEqual(status["height_error_mm"], .84)
+        self.assertAlmostEqual(status["remaining_mm"], .626)
+        self.assertFalse(status["arrival"]["gripper_commanded"])
+        np.testing.assert_array_equal(self._q(), before)
+
+    async def test_arrival_height_band_keeps_lateral_and_large_height_checks(self):
+        """높이 잔차만 완화하고 미도착 횡위치와 큰 높이 오차는 계속 보정 대상으로 둔다."""
+        states = await self.console.snapshot()
+        await self.session6._prepare_lift(states)
+        observed = confirmed_height_observation()
+        baseline = self.session6.planner.measure(self._q(), self.session6._grippers(states), observed)
+        cases = ((.0006, .0016, True), (.0006, -.0016, True),
+                 (.0006, .003, False), (.0006, -.003, False), (.003, .0016, False))
+        for lateral, height, expected in cases:
+            with self.subTest(lateral=lateral, height=height):
+                measured = replace(baseline, remaining_m=lateral, height_error_m=height)
+                with patch.object(self.session6.planner, "measure", return_value=measured):
+                    arrival = await self.session6._evaluate_height(observed, states)
+                self.assertEqual(arrival is not None, expected)
+        self.assertFalse(self.session6._ready_to_insert)
+        self.assertEqual(self.session6.planner.height.settings.tolerance_m, .0005)
 
     async def test_frontal_error_does_not_block_height_ready_insertion_or_completion(self):
         """정면 오차를 완료 조건으로 삼지 않고 높이와 횡위치가 맞으면 삽입을 마친다."""

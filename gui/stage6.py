@@ -37,7 +37,7 @@ class Stage6Session(ObservedBeamSession):
         self._status.update(remaining_mm=None, depth_mm=None, height_error_mm=None, overlap_mm=None,
                             goal_depth_mm=1000 * self.height_settings.target_depth_m,
                             lateral_tolerance_mm=1000 * self.insertion_settings.tolerance_m,
-                            height_tolerance_mm=1000 * self.height_settings.tolerance_m,
+                            height_tolerance_mm=1000 * self.insertion_settings.arrival_height_tolerance_m,
                             tolerance_deg=self.height_settings.alignment_tolerance_deg,
                             commanded_lift_mm=0., commanded_insert_mm=0., phase="aligning",
                             holding_goal=False, fine=False, motion_kind=None, lateral_reference=None)
@@ -57,7 +57,7 @@ class Stage6Session(ObservedBeamSession):
         self._status["lateral_reference"] = self.planner.reference.as_dict()
 
     async def _evaluate_height(self, observation, states):
-        """현재 횡위치·높이·정면을 확인하며 준비가 되면 삽입을 이어간다."""
+        """삽입 준비 높이와 완료 높이를 구분하고 도착 범위에서는 재관측만 진행한다."""
         q_current = self._angles(states)
         try:
             measured = self.planner.measure(q_current, self._grippers(states), observation)
@@ -68,15 +68,19 @@ class Stage6Session(ObservedBeamSession):
         height_ready = abs(measured.height_error_m) <= self.height_settings.tolerance_m
         if height_ready:
             self._ready_to_insert = True
-        phase = "inserting" if self._ready_to_insert else "aligning"
+        height_arrived = abs(measured.height_error_m) <= self.insertion_settings.arrival_height_tolerance_m
+        reached = abs(measured.remaining_m) <= self.insertion_settings.tolerance_m and height_arrived
+        phase = "inserting" if self._ready_to_insert or reached else "aligning"
         message = ("높이와 정면을 유지하며 4단계 출발 횡위치로 복귀합니다." if self._ready_to_insert
                    else "삽입 전 목표 높이를 맞추며 정면을 보정합니다.")
+        if reached:
+            message = "삽입 위치와 높이가 완료 범위 안입니다. 현재 자세에서 도착을 확인합니다."
         self._update("OBSERVING", message, observation=observation.as_dict(), phase=phase,
                      remaining_mm=1000 * measured.remaining_m, depth_mm=1000 * measured.depth_m,
                      height_error_mm=1000 * measured.height_error_m, overlap_mm=1000 * measured.overlap_m,
                      goal_depth_mm=1000 * measured.goal_depth_m,
                      tilt_deg=measured.tilt_deg, rgb_center_camera_m=measured.rgb_center_camera_m.tolist())
-        if (abs(measured.remaining_m) <= self.insertion_settings.tolerance_m and height_ready):
+        if reached:
             return {"observed_at_s": observation.last_frame_s, "remaining_mm": 1000 * measured.remaining_m,
                     "depth_mm": 1000 * measured.depth_m, "goal_depth_mm": 1000 * measured.goal_depth_m,
                     "height_error_mm": 1000 * measured.height_error_m,

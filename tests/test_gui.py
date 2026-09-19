@@ -69,7 +69,7 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
     async def test_recent_pose_survives_reset_gripper_and_console_restart(self) -> None:
         """실제 측정값 대신 입력한 목표를 보존하며 초기화와 그리퍼 명령으로 덮어쓰지 않는다."""
         targets = {name: 7.13 for name in self.names if name.startswith("J")}
-        self.controller.move_many.side_effect = lambda angles: dict.fromkeys(angles, 7.119)
+        self.controller.move_many.side_effect = lambda angles, **kwargs: dict.fromkeys(angles, 7.119)
         self.controller.command_id.return_value = 1
         status, _ = await self._post("/api/pose", {"angles_deg": targets})
         self.assertEqual(status, 200)
@@ -87,6 +87,28 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["pose"]["angles_deg"], targets)
         self.assertEqual(self.controller.move_many.call_count, calls_before)
+
+    async def test_pose_gripper_buttons_use_twenty_degrees_per_second(self) -> None:
+        """자세 편집기의 양쪽 그리퍼 열기·잠금 명령에 같은 속도를 전달한다."""
+        self.controller.move_many.side_effect = lambda angles, **kwargs: angles
+        self.controller.command_id.return_value = 1
+        for joint in ("G_L", "G_R"):
+            for angle in (-120., 4.6):
+                with self.subTest(joint=joint, angle=angle):
+                    targets = {joint: angle}
+                    status, _ = await self._post("/api/pose", {"angles_deg": targets})
+                    self.assertEqual(status, 200)
+                    self.controller.move_many.assert_called_with(targets, speed_deg_s=20.)
+
+    async def test_gripper_default_preserves_body_and_explicit_speeds(self) -> None:
+        """그리퍼 기본 속도가 몸통이나 따로 지정한 속도를 덮어쓰지 않는다."""
+        self.controller.move_many.side_effect = lambda angles, **kwargs: angles
+        self.controller.command_id.return_value = 1
+        for targets in ({"J1": 5.}, {"J1": 5., "G_L": 4.6}):
+            await self.console.move_pose(targets)
+            self.controller.move_many.assert_called_with(targets)
+        await self.console.move_pose({"G_R": -120.}, speed_deg_s=8.)
+        self.controller.move_many.assert_called_with({"G_R": -120.}, speed_deg_s=8.)
 
     async def test_failed_motion_preserves_previous_pose_and_save_failure_reports_acceptance(self) -> None:
         """거부된 목표를 저장하지 않고 파일 저장 실패와 이미 전송된 이동을 구분한다."""

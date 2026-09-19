@@ -37,6 +37,17 @@ class ObservedLiftSession(ObservedMotionSession):
         """단계별 계획기와 이번 실행에서 사용할 거리 이력을 준비한다."""
         raise NotImplementedError
 
+    async def _prepare_observation(self, reader):
+        """카메라를 연 뒤 단계별 개방이나 초기 경로 확인을 수행한다."""
+
+    async def _complete_lift(self, arrival, states):
+        """새 관측으로 확인한 단계 도착을 기록한다."""
+        self._update("REACHED", self._reached_message, arrival=arrival)
+
+    def _command_guard(self):
+        """관측 기반 목표를 보내기 직전에 실행 소유권을 확인한다."""
+        self._guard()
+
     def _observation_options(self, states):
         """관측기에 전달할 단계별 추가 정보를 반환한다."""
         return {}
@@ -81,6 +92,7 @@ class ObservedLiftSession(ObservedMotionSession):
             await asyncio.to_thread(reader.__enter__)
             deadline = time.monotonic() + self.settings.timeout_s if self._bounded_execution else None
             self._deadline = deadline
+            await self._prepare_observation(reader)
             good = 0
             while deadline is None or time.monotonic() < deadline:
                 states = await self._observation_states(deadline)
@@ -112,7 +124,7 @@ class ObservedLiftSession(ObservedMotionSession):
                         continue
                     good += 1
                     if good >= 2:
-                        self._update("REACHED", self._reached_message, arrival=arrival)
+                        await self._complete_lift(arrival, after)
                         return
                     continue
                 good = 0
@@ -126,9 +138,9 @@ class ObservedLiftSession(ObservedMotionSession):
                 # 계획 관절각을 공통 모터 제어기의 도 단위로 변환: $$q_{deg}=q_{rad}180/\pi$$
                 targets = dict(zip(ARM_JOINT_NAMES, np.rad2deg(step.q_rad).tolist(), strict=True))
                 motion_options = self._motion_options(step, fresh)
-                receipt = await self.console.move_pose(targets, remember=False, owner=self, guard=self._guard,
+                receipt = await self.console.move_pose(targets, remember=False, owner=self, guard=self._command_guard,
                                                         **motion_options)
-                self._owned_ids = dict(receipt["command_ids"])
+                self._owned_ids.update(receipt["command_ids"])
                 self._expected_ids.update(self._owned_ids)
                 message, values = self._record_lift(step)
                 # 실제 전송한 계획만 누적 상승량에 반영: $$H_{next}=H+1000s$$
