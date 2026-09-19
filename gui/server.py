@@ -28,6 +28,11 @@ from hardware.sts3215 import MotorError, STS3215Bus
 from kinematics.joints import ARM_JOINT_NAMES
 from gui.stage1 import Stage1Session, install_routes
 from gui.camera import CameraPreview, install_routes as install_camera_routes
+from gui.stage2 import Stage2Session, install_routes as install_stage2_routes
+from gui.stage3 import Stage3Session, install_routes as install_stage3_routes
+from gui.stage4 import Stage4Session, install_routes as install_stage4_routes
+from gui.stage5 import Stage5Session, install_routes as install_stage5_routes
+from gui.stage6 import Stage6Session, install_routes as install_stage6_routes
 
 
 INDEX_PATH = Path(__file__).resolve().parent / "static" / "index.html"
@@ -53,6 +58,11 @@ class Console:
         self.scan_status: dict = {"status": "idle"}
         self.stage1 = Stage1Session(self)
         self.camera = CameraPreview()
+        self.stage2 = Stage2Session(self)
+        self.stage3 = Stage3Session(self)
+        self.stage4 = Stage4Session(self)
+        self.stage5 = Stage5Session(self)
+        self.stage6 = Stage6Session(self)
 
     @property
     def joint_names(self) -> tuple[str, ...]:
@@ -66,6 +76,11 @@ class Console:
 
     async def close(self) -> None:
         """조회 작업을 종료하고 진행 중인 통신이 끝날 때까지 기다린다."""
+        await self.stage6.stop()
+        await self.stage5.stop()
+        await self.stage4.stop()
+        await self.stage3.stop()
+        await self.stage2.stop()
         await self.stage1.stop()
         if self._scan_task is not None:
             await asyncio.gather(asyncio.shield(self._scan_task), return_exceptions=True)
@@ -138,7 +153,9 @@ class Console:
             states = await self.snapshot()
             await self.stage1.observe(states)
             payload = {"joints": states, "error": None, "scan": self.scan_status,
-                       "stage1": self.stage1.status()}
+                       "stage1": self.stage1.status(), "stage2": self.stage2.status(),
+                       "stage3": self.stage3.status(), "stage4": self.stage4.status(), "stage5": self.stage5.status(),
+                       "stage6": self.stage6.status()}
             for updates in self._subscribers:
                 if updates.full():
                     updates.get_nowait()
@@ -156,12 +173,15 @@ class Console:
         if errors:
             raise MotorError("처리하지 못한 관절: " + "; ".join(errors))
 
-    def _require_idle_setup(self) -> None:
+    def _require_idle_setup(self, owner=None) -> None:
         """영점 설정이나 촬영 중 자세를 바꾸는 명령이 겹치지 않게 한다."""
         if self._calibration_task is not None and not self._calibration_task.done():
             raise MotorError("전체 중점·영점 설정 중입니다. 완료 후 명령해 주세요.")
         if self._scan_task is not None and not self._scan_task.done():
             raise MotorError("스캔 중입니다. 저장 완료 후 명령해 주세요.")
+        for stage in (self.stage2, self.stage3, self.stage4, self.stage5, self.stage6):
+            if stage.active and owner is not stage:
+                raise MotorError(f"{stage.label} 중입니다. 단계 중지 후 다른 명령을 실행해 주세요.")
 
     async def _scan_snapshot(self) -> dict:
         """촬영 전후의 실제 관절각과 조회 시간을 공통 제어 경로에서 수집한다."""
@@ -250,13 +270,22 @@ class Console:
 
         return await self.run(read)
 
-    async def move_pose(self, angles_deg: dict[str, float], remember: bool = True) -> dict:
+    async def move_pose(self, angles_deg: dict[str, float], remember: bool = True, *, owner=None,
+                        guard: Callable[[], None] | None = None, speed_deg_s: float | None = None,
+                        acceleration_deg_s2: float | None = None) -> dict:
         """기존 통신 연결에서 목표 각도를 묶어 전송하고 관절별 명령 번호를 반환한다."""
-        self._require_idle_setup()
+        self._require_idle_setup(owner)
 
         def send() -> dict:
             """전송과 명령 번호 수집 사이에 다른 명령이 끼어들지 않게 한다."""
-            targets_deg = self._controller.move_many(angles_deg)
+            if guard is not None:
+                guard()
+            motion_options = {}
+            if speed_deg_s is not None:
+                motion_options["speed_deg_s"] = speed_deg_s
+            if acceleration_deg_s2 is not None:
+                motion_options["acceleration_deg_s2"] = acceleration_deg_s2
+            targets_deg = self._controller.move_many(angles_deg, **motion_options)
             result = {"targets_deg": targets_deg,
                       "command_ids": {joint: self._controller.command_id(joint) for joint in targets_deg},
                       "log_path": str(self._controller.log_path)}
@@ -287,12 +316,23 @@ class Console:
 
     async def stop(self, joints: tuple[str, ...]) -> None:
         """지정한 관절을 현재 위치에서 멈춘다."""
+        self.stage2.request_stop()
+        self.stage3.request_stop()
+        self.stage4.request_stop()
+        self.stage5.request_stop()
+        self.stage6.request_stop()
         await self.run(lambda: self._apply_all(joints, self._controller.stop))
 
     async def set_torque(self, joints: tuple[str, ...], enabled: bool) -> None:
         """지정한 관절의 토크만 켜거나 끈다."""
         if enabled:
             self._require_idle_setup()
+        else:
+            self.stage2.request_stop()
+            self.stage3.request_stop()
+            self.stage4.request_stop()
+            self.stage5.request_stop()
+            self.stage6.request_stop()
         await self.run(lambda: self._apply_all(joints, lambda name: self._controller.set_torque(name, enabled)))
 
     async def save_zero(self, joint: str) -> None:
@@ -386,6 +426,11 @@ def create_app(port: str | None, baudrate: int | None) -> FastAPI:
 
     install_routes(app, console)
     install_camera_routes(app, console)
+    install_stage2_routes(app, console)
+    install_stage3_routes(app, console)
+    install_stage4_routes(app, console)
+    install_stage5_routes(app, console)
+    install_stage6_routes(app, console)
 
     def targets(joint: str | None) -> tuple[str, ...]:
         """요청이 가리키는 관절을 정하며 생략하면 전체를 대상으로 한다."""

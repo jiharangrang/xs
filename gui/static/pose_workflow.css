@@ -5,8 +5,8 @@ main{grid-template-columns:minmax(0,1fr) clamp(350px,30vw,430px)}
 .panel-heading h2{margin:0; font-size:13px; font-weight:500}
 .status-pill{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; color:var(--ink-2); white-space:nowrap}
 .status-pill::before{content:""; width:5px; height:5px; border-radius:50%; background:var(--ink-3)}
-.status-pill[data-state="LIVE"]::before,.status-pill[data-state="ARRIVED"]::before{background:#27a374}
-.status-pill[data-state="MOVING"]::before,.status-pill[data-state="STARTING"]::before{background:var(--accent)}
+.status-pill[data-state="LIVE"]::before,.status-pill[data-state="ARRIVED"]::before,.status-pill[data-state="ALIGNED"]::before,.status-pill[data-state="REACHED"]::before{background:#27a374}
+.status-pill[data-state="MOVING"]::before,.status-pill[data-state="STARTING"]::before,.status-pill[data-state="OBSERVING"]::before{background:var(--accent)}
 .status-pill[data-state="ERROR"]::before,.status-pill[data-state="FAILED"]::before{background:#c64040}
 .camera-view{position:relative; aspect-ratio:16/10; overflow:hidden; border-radius:9px; background:#10171e; border:1px solid var(--line)}
 .camera-view img{width:100%; height:100%; object-fit:contain; display:block}

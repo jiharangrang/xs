@@ -33,6 +33,7 @@ class BeamEstimate:
     width_m: float | None = None
     centerline_point_m: np.ndarray | None = None
     edge_lines_m: np.ndarray | None = None
+    boundary_lines_m: np.ndarray | None = None
 
     def as_dict(self) -> dict:
         """큰 영상 마스크를 제외한 결과를 JSON으로 저장할 수 있게 바꾼다."""
@@ -279,4 +280,5 @@ def estimate_beam(depth_m: np.ndarray, profile: dict, *,
     rms = float(np.sqrt(np.mean(residual**2)))
     lines = _boundary_lines(mask, profile, normal, offset, bounds)
     geometry = _edge_geometry(lines, normal, axis_hint)
-    return BeamEstimate(normal, offset, rms, float(mask.sum() / valid.sum()), mask, **geometry)
+    return BeamEstimate(normal, offset, rms, float(mask.sum() / valid.sum()), mask,
+                        boundary_lines_m=np.asarray(lines).reshape(-1, 2, 3), **geometry)

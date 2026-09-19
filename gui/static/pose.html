@@ -136,11 +136,11 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
         <div class="panel-heading"><h2>단계별 진행</h2><span class="status-pill" id="workflow-state" data-state="IDLE">1단계 대기</span></div>
         <div class="step-grid">
           <button class="step-button available" type="button" id="stage1-start" aria-label="1단계 시작 자세로 이동" title="실제 모터를 빔 아래 시작 자세로 이동합니다." disabled><span class="step-number">1</span><span class="step-copy"><b>시작 자세</b><small id="stage1-action">실제 모터 이동</small></span></button>
-          <button class="step-button" type="button" disabled><span class="step-number">2</span><span class="step-copy"><b>정면 보정</b><small>준비 중</small></span></button>
-          <button class="step-button" type="button" disabled><span class="step-number">3</span><span class="step-copy"><b>첫 상승</b><small>준비 중</small></span></button>
-          <button class="step-button" type="button" disabled><span class="step-number">4</span><span class="step-copy"><b>외측 이동</b><small>준비 중</small></span></button>
-          <button class="step-button" type="button" disabled><span class="step-number">5</span><span class="step-copy"><b>최종 상승</b><small>준비 중</small></span></button>
-          <button class="step-button" type="button" disabled><span class="step-number">6</span><span class="step-copy"><b>삽입·확인</b><small>준비 중</small></span></button>
+          <button class="step-button available" type="button" id="stage2-start" aria-label="2단계 정면 보정 시작" title="1단계 도착을 확인한 뒤 카메라로 정면을 맞춥니다." disabled><span class="step-number">2</span><span class="step-copy"><b>정면 보정</b><small id="stage2-action">관측 후 작은 보정</small></span></button>
+          <button class="step-button available" type="button" id="stage3-start" aria-label="3단계 첫 상승 시작" title="정면 상태를 확인하고 빔 아래 간격 25 mm까지 상승합니다." disabled><span class="step-number">3</span><span class="step-copy"><b>첫 상승</b><small id="stage3-action">간격 25 mm까지</small></span></button>
+          <button class="step-button available" type="button" id="stage4-start" aria-label="4단계 외측 이동 시작" title="높이를 유지하며 고정턱 안쪽 면을 빔 밖으로 10 mm 빼냅니다." disabled><span class="step-number">4</span><span class="step-copy"><b>외측 이동</b><small id="stage4-action">옆 여유 10 mm까지</small></span></button>
+          <button class="step-button available" type="button" id="stage5-start" aria-label="5단계 최종 상승 시작" title="저장한 실측 빔 거리까지 높이와 정면을 함께 맞춥니다." disabled><span class="step-number">5</span><span class="step-copy"><b>최종 상승</b><small id="stage5-action">삽입 높이 맞추기</small></span></button>
+          <button class="step-button available" type="button" id="stage6-start" aria-label="6단계 횡방향 삽입 시작" title="높이·정면을 유지하며 4단계에서 빠지기 전의 횡위치로 돌아갑니다." disabled><span class="step-number">6</span><span class="step-copy"><b>삽입·확인</b><small id="stage6-action">4단계 출발 횡위치로</small></span></button>
         </div>
         <p class="workflow-status" id="workflow-message" role="status">시작 자세로 이동한 뒤 실제 관절의 도착을 확인합니다.</p>
         <button class="btn stop" type="button" id="workflow-stop" disabled>단계 중지</button>

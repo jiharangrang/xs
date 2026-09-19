@@ -1,4 +1,4 @@
-"""XML 모델과 팔 관절각으로 양쪽 팁의 위치와 방향을 계산한다.
+"""XML 모델과 팔 관절각으로 양쪽 팁과 깊이 카메라의 위치·방향을 계산한다.
 MuJoCo의 순기구학을 사용하며 뷰어와 물리 시간 진행에는 관여하지 않는다.
 """
 
@@ -138,3 +138,8 @@ class ForwardKinematics:
         T_world_tip_R = _site_transform(self._data, self._tip_R_id)
         T_tip_L_tip_R = _relative_transform(T_world_tip_L, T_world_tip_R)
         return FKResult(T_world_tip_L, T_world_tip_R, T_tip_L_tip_R)
+
+    def depth_camera_pose(self, q_rad: ArrayLike) -> NDArray[np.float64]:
+        """같은 모델의 깊이 광학 프레임을 월드 기준 자세로 반환한다."""
+        self.forward(q_rad)
+        return _site_transform(self._data, self._model.site("depth_frame").id)

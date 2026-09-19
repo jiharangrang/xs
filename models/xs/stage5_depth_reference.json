@@ -1,0 +1,32 @@
+{
+  "schema_version": 2,
+  "metric": "camera_to_beam_plane_perpendicular_m",
+  "target_depth_m": 0.1716460330287304,
+  "source_scan": "outputs/camera_scans/20260918T235431_476000Z",
+  "source_measurement": "outputs/stage5_references/20260918T235431_466136Z/depth_measurement.json",
+  "frames": 15,
+  "note": "사용자가 도착으로 확인한 실측 깊이·법선과 동일한 tip_R 기준점의 높이를 비교한다. 기울기는 정면 보정용이며 높이 완료의 별도 조건이 아니다.",
+  "height_reference": "tip_R",
+  "reference_frame": "depth_frame",
+  "reference_normal_camera": [
+    0.004563989140494959,
+    0.014153711104104485,
+    -0.9998894151180455
+  ],
+  "reference_tip_camera_m": [
+    0.0195,
+    0.0638,
+    0.18395000000064707
+  ],
+  "reference_joints_deg": {
+    "G_L": 4.21875,
+    "J1": -7.119140625,
+    "J2": -57.216796875,
+    "J3": 8.173828125,
+    "J4": 81.650390625,
+    "J5": 3.076171875,
+    "J6": 50.625,
+    "J7": 14.765625,
+    "G_R": -119.970703125
+  }
+}
