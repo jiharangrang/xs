@@ -1,0 +1,13 @@
+[project]
+name = "xs-vision-demo"
+version = "0.1.0"
+description = "Gemini 215 RGB를 사용하는 빨간 스티커 비전 데모"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "opencv-python>=4.10,<5",
+    "pillow>=11,<13",
+    "pyorbbecsdk2==2.1.2",
+]
+
+[tool.uv]
+package = false

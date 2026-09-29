@@ -1,0 +1,4 @@
+# 촬영 원본과 검출 결과는 로컬에만 보관한다.
+captures/
+results/
+Log/
