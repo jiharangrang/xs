@@ -1,0 +1,17 @@
+[project]
+name = "xs-corner-demo"
+version = "0.1.0"
+description = "XS 수평 ㄱ자 빔 전환의 시뮬레이션 전용 경로와 영상"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mujoco==3.13.0",
+    "numpy>=2,<3",
+    "scipy>=1.14,<2",
+    "pyyaml>=6,<7",
+    "trimesh>=4.7,<5",
+    "python-fcl>=0.7,<0.8",
+    "pillow>=11,<13",
+]
+
+[tool.uv]
+package = false
