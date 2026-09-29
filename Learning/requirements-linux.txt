@@ -1,0 +1,8 @@
+# 검증된 리눅스 CUDA 런타임과 학습·평가에 필요한 패키지만 설치한다.
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch==2.13.0+cu130
+mujoco==3.13.0
+numpy>=2,<3
+scipy>=1.14,<2
+matplotlib>=3.10,<4
+PyYAML>=6,<7

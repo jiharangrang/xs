@@ -1,0 +1,18 @@
+[project]
+name = "xs-collision-learning"
+version = "0.1.0"
+description = "XS 빔 파지 경로의 오프라인 충돌거리 능동 학습"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mujoco==3.13.0",
+    "numpy>=2,<3",
+    "torch>=2.8,<3",
+    "trimesh>=4.7,<5",
+    "coacd==1.0.11",
+    "scipy>=1.14,<2",
+    "pyyaml>=6,<7",
+    "matplotlib>=3.10,<4",
+]
+
+[tool.uv]
+package = false
