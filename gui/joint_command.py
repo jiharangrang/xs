@@ -1,4 +1,4 @@
-"""단계 실행부의 동기 관절 명령과 마지막 목표 도착 대기를 공유한다."""
+"""단계별 명령 속도와 동기 관절 전송·마지막 목표 도착 대기를 공유해요."""
 
 import asyncio
 import time
@@ -6,7 +6,8 @@ import time
 from hardware.sts3215 import MotorError
 
 
-GRIPPER_SPEED_DEG_S = 20.
+GRIPPER_SPEED_DEG_S = 30.
+STAGE1_4_BODY_SPEED_DEG_S = 20.
 
 
 class JointCommandMixin:

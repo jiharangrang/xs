@@ -10,6 +10,7 @@ from fastapi import HTTPException
 import numpy as np
 
 from control.stage1 import Stage1Tracker
+from gui.joint_command import STAGE1_4_BODY_SPEED_DEG_S
 from hardware.sts3215 import MotorError
 from kinematics.joints import ARM_JOINT_NAMES, as_joint_angles
 
@@ -69,7 +70,7 @@ class Stage1Session:
             if self.tracker.active:
                 raise MotorError("이미 1단계 자세로 이동 중입니다.")
             targets = self._targets()
-            receipt = await self.console.move_pose(targets, remember=False)
+            receipt = await self.console.move_pose(targets, remember=False, speed_deg_s=STAGE1_4_BODY_SPEED_DEG_S)
             self.tracker.begin(receipt["command_ids"], receipt["targets_deg"])
             self._log_path = receipt["log_path"]
             self._stop_error = None

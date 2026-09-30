@@ -1,11 +1,12 @@
-"""새 깊이로 그리퍼와 빔 사이 간격을 확인하며 목표 간격까지 조금씩 상승한다.
-관측과 실제 도착 대기는 공통 실행부를 사용하고 횡이동·삽입·파지는 수행하지 않는다.
+"""새 깊이로 빔과의 간격을 확인하고 정면을 보정한 뒤 목표 간격까지 상승해요.
+관측과 실제 도착 대기는 공통 실행부를 사용해요.
 """
 
 import asyncio
 
 from fastapi import HTTPException
 
+from gui.joint_command import STAGE1_4_BODY_SPEED_DEG_S
 from gui.observed_lift import ObservedLiftSession
 from gui.observed_motion import MotionStopped, ObservedMotionSettings
 from hardware.sts3215 import MotorError
@@ -39,8 +40,12 @@ class Stage3Session(ObservedLiftSession):
         self._last_gap = None
         self._nonprogress = 0
 
+    def _motion_options(self, step, states):
+        """첫 상승과 정면 재보정에 1~4단계 공통 몸통 속도를 적용해요."""
+        return {"speed_deg_s": STAGE1_4_BODY_SPEED_DEG_S}
+
     async def _evaluate_height(self, observation, states):
-        """새 빔 간격으로 시작 조건과 과상승을 검사하고 목표 도착 정보를 반환한다."""
+        """시작 거리와 과상승을 확인하고 기울기가 남으면 기존 보정 계획으로 넘겨요."""
         q_current = self._angles(states)
         grippers = self._grippers(states)
         tilt = tilt_degrees(observation.normal)
@@ -50,8 +55,6 @@ class Stage3Session(ObservedLiftSession):
         self._update("OBSERVING", "빔 아래 간격을 확인했습니다.", observation=observation.as_dict(),
                      gap_mm=1000 * gap, tilt_deg=tilt)
         if self._initial_gap is None:
-            if tilt > self.lift_settings.alignment_tolerance_deg:
-                raise MotorError("먼저 2단계 정면 보정을 완료해 주세요.")
             if gap - self.lift_settings.gap_m > self.lift_settings.max_total_m:
                 raise MotorError("목표 간격까지 너무 멉니다. 시작 자세를 확인해 주세요.")
             self._initial_gap = gap

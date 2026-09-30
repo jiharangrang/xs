@@ -8,6 +8,7 @@ import time
 from fastapi import HTTPException
 import numpy as np
 
+from gui.joint_command import STAGE1_4_BODY_SPEED_DEG_S
 from gui.observed_motion import (MotionStopped as AlignmentStopped, ObservedMotionSession,
                                  ObservedMotionSettings as Stage2Settings)
 from hardware.camera import CameraError
@@ -109,7 +110,8 @@ class Stage2Session(ObservedMotionSession):
                 # 계획 라디안 목표를 기존 제어기의 도 단위로 변환: $$q_{deg}=q_{rad}180/\pi$$
                 degrees = np.rad2deg(step.q_rad)
                 targets = dict(zip(ARM_JOINT_NAMES, degrees.tolist(), strict=True))
-                receipt = await self.console.move_pose(targets, remember=False, owner=self, guard=self._guard)
+                receipt = await self.console.move_pose(targets, remember=False, owner=self, guard=self._guard,
+                                                       speed_deg_s=STAGE1_4_BODY_SPEED_DEG_S)
                 self._owned_ids = dict(receipt["command_ids"])
                 self._expected_ids.update(self._owned_ids)
                 last_tilt = tilt

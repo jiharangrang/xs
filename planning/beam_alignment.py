@@ -45,7 +45,7 @@ class AlignmentSettings:
     gain: float = .6
     max_camera_step_deg: float = 2.
     max_joint_step_deg: float = 3.
-    max_total_joint_deg: float = 20.
+    max_total_joint_deg: float = 25.
     max_observed_tilt_deg: float = 30.
     tip_tolerance_m: float = .0005
 

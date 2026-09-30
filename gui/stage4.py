@@ -10,6 +10,7 @@ from fastapi import HTTPException
 import numpy as np
 
 from gui.observed_motion import MotionStopped, ObservedMotionSession, ObservedMotionSettings
+from gui.joint_command import STAGE1_4_BODY_SPEED_DEG_S
 from hardware.camera import CameraError
 from hardware.sts3215 import MotorError
 from kinematics.joints import ARM_JOINT_NAMES
@@ -148,7 +149,8 @@ class Stage4Session(ObservedMotionSession):
                     continue
                 # 공통 모터 제어기에 전달할 도 단위 목표: $$q_{deg}=q_{rad}180/\pi$$
                 targets = dict(zip(ARM_JOINT_NAMES, np.rad2deg(step.q_rad).tolist(), strict=True))
-                receipt = await self.console.move_pose(targets, remember=False, owner=self, guard=self._guard)
+                receipt = await self.console.move_pose(targets, remember=False, owner=self, guard=self._guard,
+                                                       speed_deg_s=STAGE1_4_BODY_SPEED_DEG_S)
                 self._owned_ids = dict(receipt["command_ids"])
                 self._expected_ids.update(self._owned_ids)
                 last_clearance = clearance

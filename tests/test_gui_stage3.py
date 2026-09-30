@@ -13,6 +13,7 @@ from hardware.sts3215 import MotorError
 from perception.beam import BeamDetectionError
 from perception.beam_observation import BeamObservation
 from planning.beam_lift import BeamLiftPlanner
+from planning.beam_alignment import tilt_degrees
 import test_gui_stage2 as stage2_tests
 
 
@@ -66,20 +67,50 @@ class Stage3ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(status["commanded_lift_mm"], 60.)
         self.assertEqual(grippers, {index: bytes(self.chain.devices[index]) for index in (0, 8)})
 
-    async def test_already_close_and_unaligned_starts_cannot_rise(self):
-        """목표보다 가까운 자세와 정면을 보지 않는 자세에서는 상승 패킷을 보내지 않는다."""
+    async def test_already_close_and_excessive_tilt_starts_cannot_rise(self):
+        """목표보다 가까운 자세와 보정 범위를 넘는 기울기에서는 이동하지 않아요."""
         count = self._move_count()
         self.distance = .210
         await self.session3.start()
         self.assertEqual((await self._finish())["state"], "STOPPED")
         self.assertEqual(self._move_count(), count)
         self.distance = .2457
-        direction = np.array([.1, 0., -1.])
+        direction = np.array([1., 0., -1.])
         direction /= np.linalg.norm(direction)
         self.world_normal = self.start_camera[:3, :3] @ direction
         await self.session3.start()
         self.assertEqual((await self._finish())["state"], "FAILED")
         self.assertEqual(self._move_count(), count)
+
+    async def test_entry_tilt_is_corrected_before_any_lift(self):
+        r"""단계 전환 뒤 기울기가 커져도 먼저 정면을 보정한 다음 목표 간격에 도달해요.
+
+        $$n_W=R_{WC,0}n_C$$
+        """
+        direction = np.array([0., .026187832868040, -.999657324975557])
+        # 시작 카메라에서 관측한 약 1.5도 기울기를 월드에 고정해요: $$n_W=R_{WC,0}n_C$$
+        self.world_normal = self.start_camera[:3, :3] @ direction
+        planner = BeamLiftPlanner()
+        original = planner.plan
+        planned = []
+
+        def record(*args):
+            """각 계획의 관측 기울기와 실제로 지시한 상승량을 기록해요."""
+            step = original(*args)
+            planned.append((tilt_degrees(args[2]), step.kind, step.distance_m))
+            return step
+
+        planner.plan = record
+        self.session3.planner = planner
+        await self.session3.start()
+        status = await self._finish()
+        self.assertEqual(status["state"], "REACHED", status)
+        self.assertEqual(planned[0][1:], ("alignment", 0.))
+        self.assertTrue(any(distance > 0 for _, _, distance in planned))
+        for tilt, _, distance in planned:
+            if tilt > self.session3.lift_settings.alignment_tolerance_deg:
+                self.assertEqual(distance, 0.)
+        self.assertLessEqual(abs(status["arrival"]["gap_mm"] - 25.), 2.)
 
     async def test_lost_depth_holds_and_recovers(self):
         """깊이가 잠깐 사라지면 추가 상승 없이 다음 관측을 기다린다."""

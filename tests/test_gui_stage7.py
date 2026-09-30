@@ -1,4 +1,4 @@
-"""가짜 모터로 뒷그리퍼 개방·당김·횡복귀의 순서와 지지 보존·중지를 검증한다."""
+"""가짜 모터로 뒷그리퍼 개방·당김·횡복귀·잠금의 순서와 지지 보존·중지를 검증해요."""
 
 import asyncio
 from pathlib import Path
@@ -72,8 +72,8 @@ class Stage7ConsoleTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(asyncio.shield(self.session7._task), timeout=18.)
         return self.session7.status()
 
-    async def test_full_open_pull_sequence_and_api_without_closing(self):
-        """기본 100 mm 실행은 현재각 유지 후 개방하고 앞 그리퍼를 건드리지 않는다."""
+    async def test_full_open_pull_return_and_close_sequence_and_api(self):
+        """기본 100 mm 실행은 횡복귀 후 L을 잠그고 앞 그리퍼를 유지해요."""
         front = bytes(self.chain.devices[8])
         code, _ = await stage1_tests.Stage1ConsoleTests._request(self, "/api/stage7/start")
         self.assertEqual(code, 200)
@@ -82,11 +82,12 @@ class Stage7ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["planned_progress_mm"], 100.)
         self.assertEqual(status["arrival"]["confirmation"], "joint_path_only")
         self.assertFalse(status["arrival"]["closed"])
+        self.assertEqual(status["phase"], "close_sent")
         self.assertTrue(Path(status["path"]).exists())
         self.assertEqual(set(self.sent[0]), set(ARM_JOINT_NAMES))
         np.testing.assert_allclose([self.sent[0][name] for name in ARM_JOINT_NAMES], Q_DEG, atol=.09)
         self.assertEqual(self.sent[1], {"G_L": -120.})
-        self.assertEqual(self.sent_options[1]["speed_deg_s"], 20.)
+        self.assertEqual(self.sent_options[1]["speed_deg_s"], 30.)
         self.assertEqual(self.sent_options[0]["speed_deg_s"], 3.)
         self.assertEqual(set(self.sent[2]), {"J1", "J7"})
         self.assertAlmostEqual(self.sent[2]["J1"] - self.sent[0]["J1"], 3., delta=.09)
@@ -95,7 +96,9 @@ class Stage7ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(status["side_return_completed"])
         self.assertAlmostEqual(status["planned_return_mm"], status["side_return_distance_mm"])
         self.assertEqual(status["return_reference"]["kind"], "stage7_start_lateral")
-        self.assertTrue(all(set(targets) == set(ARM_JOINT_NAMES) for targets in self.sent[3:]))
+        self.assertTrue(all(set(targets) == set(ARM_JOINT_NAMES) for targets in self.sent[3:-1]))
+        self.assertEqual(self.sent[-1], {"G_L": 4.6})
+        self.assertEqual(self.sent_options[-1]["speed_deg_s"], 30.)
         self.assertEqual(front, bytes(self.chain.devices[8]))
         self.assertAlmostEqual(status["arrival"]["positions_deg"]["G_L"], -120., delta=.09)
         code, current = await stage1_tests.Stage1ConsoleTests._request(self, "/api/stage7", "GET")
@@ -329,3 +332,58 @@ class Stage7ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(status["side_return_completed"])
         self.assertEqual(return_counts, [len(self.sent)])
         self.assertAlmostEqual(self.controller.read("G_L").position_deg, -120., delta=.09)
+
+    async def test_failed_return_arrival_never_closes(self):
+        """횡복귀 도착 실패 뒤에는 L 잠금 명령을 보내지 않아요."""
+        original = self.session7._wait_targets
+
+        async def fail_return(targets):
+            """횡복귀의 마지막 실측 도착만 실패시켜요."""
+            if self.session7.status()["phase"] == "side_return_arrival":
+                raise MotorError("시험 횡복귀 도착 실패")
+            return await original(targets)
+
+        self.session7._wait_targets = fail_return
+        await self.session7.start(4.)
+        status = await self._finish()
+        self.assertEqual(status["state"], "FAILED", status)
+        self.assertFalse(status["side_return_completed"])
+        self.assertNotIn({"G_L": 4.6}, self.sent)
+
+    async def test_stop_after_return_prevents_closing(self):
+        """횡복귀 도착 직후 중지하면 L 잠금을 시작하지 않아요."""
+        original = self.session7._return_laterally
+
+        async def stop_after_return():
+            """횡복귀의 실측 도착 직후 사용자 정지를 재현해요."""
+            current = await original()
+            self.session7.request_stop()
+            return current
+
+        self.session7._return_laterally = stop_after_return
+        await self.session7.start(4.)
+        status = await self._finish()
+        self.assertEqual(status["state"], "STOPPED", status)
+        self.assertTrue(status["side_return_completed"])
+        self.assertNotIn({"G_L": 4.6}, self.sent)
+
+    async def test_close_command_does_not_add_an_arrival_wait(self):
+        """마지막 L 닫기는 명령만 보내고 별도의 도착 확인을 기다리지 않아요."""
+        original = self.controller.move_many
+
+        def blocked_lock(targets, **kwargs):
+            """잠금 시 L 손가락이 움직이지 않는 상황을 재현해요."""
+            receipt = original(targets, **kwargs)
+            if targets.get("G_L") == 4.6:
+                calibration = self.controller._calibration("G_L")
+                self.chain.devices[0][56:58] = calibration.degrees_to_raw(-120.).to_bytes(2, "little")
+            return receipt
+
+        with patch.object(self.controller, "move_many", side_effect=blocked_lock):
+            await self.session7.start(4.)
+            status = await self._finish()
+        self.assertEqual(status["state"], "REACHED", status)
+        self.assertTrue(status["side_return_completed"])
+        self.assertEqual(status["phase"], "close_sent")
+        self.assertFalse(status["arrival"]["closed"])
+        self.assertIn({"G_L": 4.6}, self.sent)

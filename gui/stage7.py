@@ -1,5 +1,5 @@
-"""앞 그리퍼를 유지한 채 뒷 그리퍼를 열고 옆으로 빼서 당긴 뒤 빔 쪽으로 복귀한다.
-현재각 유지와 개방 도착을 먼저 확인하며 어떤 종료 경로에서도 재파지하지 않는다.
+"""앞 그리퍼를 유지한 채 기존 뒷그리퍼 당김·횡복귀를 실행해요.
+마지막에 L 그리퍼를 닫는 명령을 한 번 보내요.
 """
 
 import asyncio
@@ -28,7 +28,7 @@ class RearPullRequest(BaseModel):
 
 
 class Stage7Session(JointCommandMixin, ObservedMotionSession):
-    """오른쪽 지지를 확인하고 개방과 몸통 이동을 순서대로 실행한다."""
+    """오른쪽 지지를 확인하고 개방·몸통 이동·왼쪽 잠금을 순서대로 실행해요."""
 
     def __init__(self, console, *, planner=None, observer=observe_beam_edge, settings=None, continuous_motion=None):
         """실행 중 장치에 접근할 계획기와 관측기를 준비한다."""
@@ -48,7 +48,7 @@ class Stage7Session(JointCommandMixin, ObservedMotionSession):
                             pull_execution="continuous", pull_period_s=self.continuous_motion.settings.period_s)
 
     async def start(self, distance_mm=DEFAULT_PULL_MM):
-        """입력 거리와 중복 실행을 확인한 뒤 개방·당김·횡복귀 작업을 시작한다."""
+        """입력 거리와 중복 실행을 확인한 뒤 개방·당김·횡복귀·잠금 작업을 시작해요."""
         request = RearPullRequest(distance_mm=distance_mm)
         if self.active:
             raise MotorError("이미 뒷그리퍼 당기기 중입니다.")
@@ -175,7 +175,7 @@ class Stage7Session(JointCommandMixin, ObservedMotionSession):
         return current
 
     async def _run(self):
-        r"""현재각 유지·개방·외측 회전·연속 당김·횡복귀를 실행하고 열린 채 종료한다.
+        r"""현재각 유지·개방·외측 회전·연속 당김·횡복귀·왼쪽 잠금을 실행해요.
 
         $$q_{deg}=q_{rad}180/\pi$$
         """
@@ -209,8 +209,10 @@ class Stage7Session(JointCommandMixin, ObservedMotionSession):
             plan, current = await self._plan_current(reader, "pull_after_exit.json", include_side_exit=False)
             await self._pull_continuously(plan)
             current = await self._return_laterally()
-            self._update("REACHED", "당김·횡복귀 완료 · 뒷그리퍼는 열린 상태입니다. 실제 삽입 위치를 확인해 주세요.",
-                         phase="open_done", arrival={"confirmation": "joint_path_only", "closed": False,
+            await self._send({"G_L": 4.6}, "L 그리퍼를 +4.6°로 닫는 명령을 보내요.",
+                             phase="closing", speed_deg_s=GRIPPER_SPEED_DEG_S)
+            self._update("REACHED", "당김·횡복귀 완료 · L 그리퍼 닫기 명령을 전송했어요.",
+                         phase="close_sent", arrival={"confirmation": "joint_path_only", "closed": False,
                          "positions_deg": {s["name"]: s["position_deg"] for s in current}})
         except MotionStopped as error:
             self._update("STOPPED", str(error))
@@ -227,7 +229,7 @@ class Stage7Session(JointCommandMixin, ObservedMotionSession):
 
 
 def install_routes(app, console):
-    """뒷그리퍼 개방·당김·횡복귀의 시작·중지·상태 API를 등록한다."""
+    """뒷그리퍼 개방·당김·횡복귀·잠금의 시작·중지·상태 API를 등록해요."""
     @app.get("/api/stage7")
     async def status():
         """당김 진행 상태와 저장 경로를 반환한다."""
@@ -235,7 +237,7 @@ def install_routes(app, console):
 
     @app.post("/api/stage7/start")
     async def start(request: RearPullRequest):
-        """현재 자세에서 뒷그리퍼를 열고 지정 거리만 당긴 뒤 빔 쪽으로 복귀한다."""
+        """뒷그리퍼를 열고 지정 거리만 당긴 뒤 빔 쪽으로 복귀하고 다시 잠가요."""
         try:
             return await console().stage7.start(request.distance_mm)
         except (ValueError, MotorError, OSError) as error:
@@ -243,5 +245,5 @@ def install_routes(app, console):
 
     @app.post("/api/stage7/stop")
     async def stop():
-        """다시 잠그지 않고 당김 동작을 중지한다."""
+        """현재 동작을 중지하고 이후 이동이나 잠금 명령을 보내지 않아요."""
         return await console().stage7.stop()

@@ -88,7 +88,7 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["pose"]["angles_deg"], targets)
         self.assertEqual(self.controller.move_many.call_count, calls_before)
 
-    async def test_pose_gripper_buttons_use_twenty_degrees_per_second(self) -> None:
+    async def test_pose_gripper_buttons_use_thirty_degrees_per_second(self) -> None:
         """자세 편집기의 양쪽 그리퍼 열기·잠금 명령에 같은 속도를 전달한다."""
         self.controller.move_many.side_effect = lambda angles, **kwargs: angles
         self.controller.command_id.return_value = 1
@@ -98,7 +98,7 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
                     targets = {joint: angle}
                     status, _ = await self._post("/api/pose", {"angles_deg": targets})
                     self.assertEqual(status, 200)
-                    self.controller.move_many.assert_called_with(targets, speed_deg_s=20.)
+                    self.controller.move_many.assert_called_with(targets, speed_deg_s=30.)
 
     async def test_gripper_default_preserves_body_and_explicit_speeds(self) -> None:
         """그리퍼 기본 속도가 몸통이나 따로 지정한 속도를 덮어쓰지 않는다."""
