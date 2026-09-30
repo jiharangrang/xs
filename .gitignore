@@ -15,8 +15,9 @@ MUJOCO_LOG.TXT
 # 실행마다 자동 저장되는 모터 진단 로그
 logs/motors/
 
-# 카메라 입력 시험에서 저장한 실제 영상
-outputs/
+# 실행 출력은 제외하고 공통 시작 자세만 공유해요.
+outputs/*
+!outputs/stage1_observation_pose.json
 
 # macOS 자동 생성 파일
 .DS_Store

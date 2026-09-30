@@ -1,5 +1,5 @@
-"""1단계 실측 도착 뒤 관측·작은 자세 보정·재관측을 반복하는 2단계 실행부다.
-공유 카메라와 공통 관절 제어기를 연결하며 정면 정렬만 수행하고 상승·삽입은 하지 않는다.
+"""1단계 시작 자세 근처에서 관측·작은 자세 보정·재관측으로 정면을 맞춰요.
+공유 카메라와 공통 관절 제어기를 연결해요.
 """
 
 import asyncio
@@ -12,12 +12,13 @@ from gui.joint_command import STAGE1_4_BODY_SPEED_DEG_S
 from gui.observed_motion import (MotionStopped as AlignmentStopped, ObservedMotionSession,
                                  ObservedMotionSettings as Stage2Settings)
 from hardware.camera import CameraError
-from hardware.joint_control import JointState
 from hardware.sts3215 import MotorError
 from kinematics.joints import ARM_JOINT_NAMES
 from perception.beam import BeamDetectionError
 from perception.beam_observation import observe_beam
 from planning.beam_alignment import BeamAlignmentPlanner, tilt_degrees
+
+ENTRY_POSE_TOLERANCE_DEG = 5.
 
 
 class Stage2Session(ObservedMotionSession):
@@ -31,7 +32,7 @@ class Stage2Session(ObservedMotionSession):
         self.observer = observer
 
     def _check_entry(self, states):
-        """현재 실측이 1단계 목표에 도착했는지 확인해 서버 재시작 후에도 같은 자세를 인계한다."""
+        """각 몸통 관절이 1단계 목표의 5도 이내에 있고 멈췄는지 확인해요."""
         if self.console.stage1.tracker.active:
             raise MotorError("1단계 이동이 끝난 뒤 정면 보정을 시작해 주세요.")
         targets = self.console.stage1._targets()
@@ -40,9 +41,10 @@ class Stage2Session(ObservedMotionSession):
             name = state["name"]
             calibration = controller._calibration(name)
             target = calibration.raw_to_degrees(calibration.degrees_to_raw(targets[name]))
-            current = JointState(name, state["position_deg"], state["speed_deg_s"])
-            if not controller.has_arrived(current, target):
-                raise MotorError(f"{name}: 먼저 1단계 시작 자세에 도착해야 합니다.")
+            if abs(state["position_deg"] - target) > ENTRY_POSE_TOLERANCE_DEG:
+                raise MotorError(f"{name}: 1단계 시작 자세와의 차이가 {ENTRY_POSE_TOLERANCE_DEG:g}도를 넘었어요.")
+            if state["speed_deg_s"] != 0:
+                raise MotorError(f"{name}: 관절이 멈춘 뒤 정면 보정을 시작해 주세요.")
 
     async def _run(self):
         """정지 관측과 작은 보정을 반복하고 실제 영상으로만 완료를 확정한다."""

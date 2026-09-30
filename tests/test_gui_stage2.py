@@ -112,6 +112,41 @@ class Stage2ConsoleTests(unittest.IsolatedAsyncioTestCase):
         await self.session2.start()
         self.assertEqual((await self._finish())["state"], "ALIGNED")
 
+    async def test_entry_accepts_five_degrees_but_rejects_larger_offsets(self):
+        """각 관절의 양방향 5도 경계는 허용하고 경계 밖은 거부해요."""
+        states = await self.console.snapshot()
+        for name in ARM_JOINT_NAMES:
+            for offset in (-5., 5., -5.01, 5.01):
+                with self.subTest(joint=name, offset=offset):
+                    sample = [dict(state) for state in states]
+                    joint = next(state for state in sample if state["name"] == name)
+                    joint["position_deg"] += offset
+                    if abs(offset) <= 5.:
+                        self.session2._check_entry(sample)
+                    else:
+                        with self.assertRaisesRegex(MotorError, "5도를 넘었어요"):
+                            self.session2._check_entry(sample)
+
+    async def test_entry_still_rejects_motion_within_pose_tolerance(self):
+        """자세 오차가 작아도 아직 움직이는 관절은 진입을 막아요."""
+        states = await self.console.snapshot()
+        joint = next(state for state in states if state["name"] == "J1")
+        joint["position_deg"] += 4.
+        joint["speed_deg_s"] = 1.
+        with self.assertRaisesRegex(MotorError, "관절이 멈춘 뒤"):
+            self.session2._check_entry(states)
+
+    async def test_visual_loop_aligns_from_nearby_start_pose(self):
+        """시작 자세에서 조금 벗어나도 현재 자세의 영상으로 정면을 보정해요."""
+        calibration = self.controller._calibration("J1")
+        raw = int.from_bytes(self.chain.devices[1][56:58], "little")
+        shifted = calibration.degrees_to_raw(calibration.raw_to_degrees(raw) + 4.)
+        self.chain.devices[1][56:58] = shifted.to_bytes(2, "little")
+        await self.session2.start()
+        status = await self._finish()
+        self.assertEqual(status["state"], "ALIGNED", status)
+        self.assertLessEqual(status["arrival"]["tilt_deg"], 1.)
+
     async def test_stop_and_other_commands_cannot_race_with_planned_move(self):
         """계획 계산 중 정지하거나 다른 명령을 요청해도 오래된 목표가 전송되지 않는다."""
         entered, release = Event(), Event()
