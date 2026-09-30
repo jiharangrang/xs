@@ -88,7 +88,7 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
 }
 .toast.show{opacity:1; transform:translate(-50%,0)}
 </style>
-<link rel="stylesheet" href="pose_workflow.css?v=20260919-camera-sticky">
+<link rel="stylesheet" href="pose_workflow.css?v=20260930-auto-six">
 </head>
 <body>
 <div class="app">
@@ -135,6 +135,7 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
       </section>
       <section class="workflow-panel" aria-label="단계별 진행">
         <div class="panel-heading"><h2>단계별 진행</h2><span class="status-pill" id="workflow-state" data-state="IDLE">1단계 대기</span></div>
+        <button class="step-button available sequence-button" type="button" id="sequence-start" aria-label="1단계부터 앞그리퍼 전진과 마지막 몸통 토크 해제까지 자동 진행" title="각 단계 완료 뒤 2초 안정화해요. 1단계 뒤는 5초, R 잠금과 7단계 L 잠금 뒤는 각각 8초 대기해요." disabled><span class="sequence-icon" aria-hidden="true">▶</span><span class="step-copy"><b>1~8 자동 진행</b><small id="sequence-action">1·5초 → 2~6·각 2초 → 토크 해제 → R 잠금·8초 → 7·8초 → 토크 해제 → 8·2초 → 토크 해제</small></span></button>
         <div class="step-grid">
           <button class="step-button available" type="button" id="stage1-start" aria-label="1단계 시작 자세로 이동" title="실제 모터를 빔 아래 시작 자세로 이동합니다." disabled><span class="step-number">1</span><span class="step-copy"><b>시작 자세</b><small id="stage1-action">실제 모터 이동</small></span></button>
           <button class="step-button available" type="button" id="stage2-start" aria-label="2단계 정면 보정 시작" title="1단계 도착을 확인한 뒤 카메라로 정면을 맞춥니다." disabled><span class="step-number">2</span><span class="step-copy"><b>정면 보정</b><small id="stage2-action">관측 후 작은 보정</small></span></button>
@@ -142,9 +143,9 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
           <button class="step-button available" type="button" id="stage4-start" aria-label="4단계 외측 이동 시작" title="높이를 유지하며 고정턱 안쪽 면을 빔 밖으로 10 mm 빼냅니다." disabled><span class="step-number">4</span><span class="step-copy"><b>외측 이동</b><small id="stage4-action">옆 여유 10 mm까지</small></span></button>
           <button class="step-button available" type="button" id="stage5-start" aria-label="5단계 최종 상승 시작" title="저장한 실측 빔 거리까지 높이와 정면을 함께 맞춥니다." disabled><span class="step-number">5</span><span class="step-copy"><b>최종 상승</b><small id="stage5-action">삽입 높이 맞추기</small></span></button>
           <button class="step-button available" type="button" id="stage6-start" aria-label="6단계 횡방향 삽입 시작" title="높이·정면을 유지하며 4단계에서 빠지기 전의 횡위치로 돌아갑니다." disabled><span class="step-number">6</span><span class="step-copy"><b>삽입·확인</b><small id="stage6-action">4단계 출발 횡위치로</small></span></button>
-          <button class="step-button available" type="button" id="stage7-start" aria-label="7단계 뒷그리퍼 개방 후 당김·횡복귀 시작" title="앞 그리퍼가 고정된 상태에서 시작하세요. 뒷그리퍼를 -120°로 열고 J7 -3°·J1 +3°로 옆으로 뺀 뒤 연속으로 당기고, 옆 빼기 전의 횡위치로 다시 넣습니다. 열린 상태로 끝납니다." disabled><span class="step-number">7</span><span class="step-copy"><b>뒷그리퍼 당김</b><small id="stage7-action">개방·외측·당김·복귀</small></span></button>
+          <button class="step-button available" type="button" id="stage7-start" aria-label="7단계 뒷그리퍼 당김·횡복귀 후 L 닫기" title="앞 그리퍼가 고정된 상태에서 시작하세요. 뒷그리퍼를 -120°로 열고 J7 -3°·J1 +3°로 옆으로 뺀 뒤 당겨서 출발 횡위치로 복귀해요. 마지막으로 L 그리퍼를 +4.6°로 닫는 명령을 보내요." disabled><span class="step-number">7</span><span class="step-copy"><b>뒷그리퍼 당김</b><small id="stage7-action">개방·당김·복귀·L 닫기</small></span></button>
           <button class="step-button available" type="button" id="stage8-start" aria-label="8단계 앞그리퍼 전진 시작" title="뒷그리퍼를 잠그고 수동 지지 전환·내력 해소를 마친 뒤 시작하세요. 앞발 열기 → 옆 빼기 없이 높이·정면 보정하며 직진 → 앞발 잠금까지 실행합니다." disabled><span class="step-number">8</span><span class="step-copy"><b>앞그리퍼 전진</b><small id="stage8-action">수동 지지 전환 후 시작</small></span></button>
-          <label class="rear-distance">당김 거리 (mm)<input id="stage7-distance" type="number" min="1" max="100" step="1" value="100" aria-label="뒷그리퍼 당김 거리 mm"><small>앞 그리퍼 고정 후 실행 · 자동 잠금 없음</small></label>
+          <label class="rear-distance">당김 거리 (mm)<input id="stage7-distance" type="number" min="1" max="100" step="1" value="100" aria-label="뒷그리퍼 당김 거리 mm"><small>앞 그리퍼 고정 후 실행 · 복귀 후 L 닫기</small></label>
           <label class="rear-distance">전진 거리 (mm)<input id="stage8-distance" type="number" min="1" max="100" step="1" value="100" aria-label="앞그리퍼 전진 거리 mm"><small>뒷발 지지·내력 해소는 수동 · 완료 후 멈춤</small></label>
         </div>
         <p class="workflow-status" id="workflow-message" role="status">시작 자세로 이동한 뒤 실제 관절의 도착을 확인합니다.</p>
@@ -188,7 +189,7 @@ aside{background:var(--panel); border-left:1px solid var(--line); overflow-y:aut
 import * as THREE from "three";
 import {OrbitControls} from "three/addons/controls/OrbitControls.js";
 import {STLLoader} from "three/addons/loaders/STLLoader.js";
-import {createWorkflowPanel} from "./pose_workflow.js?v=20260919-stage6-arrival";
+import {createWorkflowPanel} from "./pose_workflow.js?v=20260930-both-grips-eight";
 
 const MODEL_URL = "../../models/xs/model.xml";
 const MODEL_DIR = "../../models/xs/";
@@ -616,8 +617,11 @@ async function post(route, body, timeoutMs = 30000){
   return payload;
 }
 
-async function sendPose(targets, initial = false){
-  if (!connected || pendingRequest || activeMove || stopping || scanBusy || scanRequest || recalling || workflow?.busy) return;
+async function sendPose(targets, initial = false, automatic = false){
+  if (!connected || pendingRequest || activeMove || stopping || scanBusy || scanRequest || recalling || !automatic && workflow?.busy){
+    if (automatic) throw new Error("R 잠금 버튼을 실행할 수 없는 상태예요.");
+    return;
+  }
   lastMoveJoints = Object.keys(targets);
   const grippers = lastMoveJoints.filter(name => GRIP.includes(name));
   const label = grippers.length ? `${grippers[0] === "G_L" ? "L" : "R"} 그리퍼` : "몸통 관절";
@@ -645,6 +649,7 @@ async function sendPose(targets, initial = false){
   } catch (error){
     finishMove(error.message);
     toast(error.message);
+    if (automatic) throw error;
   } finally {
     pendingRequest = null;
     updateButtons();
@@ -756,6 +761,15 @@ $("grip-left").addEventListener("click", () => sendPose({G_L: GRIP_CLOSE_DEG}));
 $("grip-right").addEventListener("click", () => sendPose({G_R: GRIP_CLOSE_DEG}));
 $("grip-open-left").addEventListener("click", () => sendPose({G_L: GRIP_OPEN_DEG}));
 $("grip-open-right").addEventListener("click", () => sendPose({G_R: GRIP_OPEN_DEG}));
+
+async function releaseBodyTorque(){
+  // 기존 토크 해제 버튼처럼 몸통 관절만 명시해서 같은 명령을 보내요.
+  const results = await Promise.allSettled(ARM.map(joint => post("/api/torque", {joint, enabled:false})));
+  const failed = ARM.filter((name, index) => results[index].status === "rejected");
+  if (failed.length) throw new Error(`몸통 토크 해제 확인 실패: ${failed.join(", ")}`);
+  return "J1–J7 토크 해제 완료 · 그리퍼 토크 유지";
+}
+
 $("release-body").addEventListener("click", async () => {
   if ($("release-body").disabled) return;
   releasingBody = true;
@@ -765,14 +779,11 @@ $("release-body").addEventListener("click", async () => {
     // 앞서 보낸 이동과 단계 정지를 마친 다음 토크를 해제해 재활성화를 막는다.
     if (pendingRequest) await pendingRequest.catch(() => {});
     if (workflow?.busy) await workflow.stop();
-    // 전체 대상인 joint:null을 사용하지 않고 몸통 관절만 명시한다.
-    const results = await Promise.allSettled(ARM.map(joint => post("/api/torque", {joint, enabled:false})));
-    const failed = ARM.filter((name, index) => results[index].status === "rejected");
-    const message = failed.length ? `몸통 토크 해제 확인 실패: ${failed.join(", ")}` : "J1–J7 토크 해제 완료 · 그리퍼 토크 유지";
+    const message = await releaseBodyTorque();
     finishMove(message);
     toast(message);
   } catch (error){
-    $("motion").textContent = error.message;
+    finishMove(error.message);
     toast(error.message);
   } finally {
     releasingBody = false;
@@ -883,6 +894,15 @@ function animate(){
 workflow = createWorkflowPanel({
   server: SERVER, post, onChange: updateButtons, notify: toast,
   onTargets: showWorkflowTargets,
+  async releaseBody(){ finishMove(await releaseBodyTorque()); },
+  lockRight: () => sendPose({G_R: GRIP_CLOSE_DEG}, false, true),
+  async stopAction(action){
+    if (action === "lockRight" || action === "closeLeft"){
+      const joint = action === "lockRight" ? "G_R" : "G_L";
+      await post("/api/stop", {joint});
+      finishMove(`${joint} 그리퍼 정지 명령을 전송했어요.`);
+    }
+  },
 });
 connectMotor();
 </script>
